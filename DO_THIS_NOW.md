@@ -63,6 +63,19 @@ Click "Environment Variables" and add:
 
 ---
 
+## ⚠️ Important: Cron Job Configuration
+
+The cron job is set to run **once per day at 9 AM UTC** (Vercel Hobby plan limit).
+
+If you need more frequent campaign processing:
+- **Option 1**: Upgrade to Vercel Pro
+- **Option 2**: Use a free external cron service (see `VERCEL_CRON_FIX.md`)
+- **Option 3**: Manually trigger via `/api/campaigns/process`
+
+See `VERCEL_CRON_FIX.md` for details.
+
+---
+
 ## 📝 After Deployment:
 
 Update JotForm webhook:
