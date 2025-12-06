@@ -1,0 +1,91 @@
+═══════════════════════════════════════════════════════════════
+  EDDIE CRM - FINAL DEPLOYMENT STEPS (I've Done Everything Else!)
+═══════════════════════════════════════════════════════════════
+
+✅ COMPLETED:
+  - Database connected to Neon
+  - Schema pushed
+  - Admin user created
+  - All code ready
+  - Environment variables prepared
+
+🎯 YOU JUST NEED TO:
+
+═══════════════════════════════════════════════════════════════
+STEP 1: Go to Vercel
+═══════════════════════════════════════════════════════════════
+
+Visit: https://vercel.com/new
+
+Sign up or Login (use GitHub - it's easiest)
+
+═══════════════════════════════════════════════════════════════
+STEP 2: Create Project
+═══════════════════════════════════════════════════════════════
+
+1. Click "New Project"
+2. Click "Import Git Repository"
+3. If your code isn't on GitHub:
+   - Go to github.com/new
+   - Create repository
+   - Upload your code
+   - Come back to Vercel
+
+═══════════════════════════════════════════════════════════════
+STEP 3: Add Environment Variables
+═══════════════════════════════════════════════════════════════
+
+Click "Environment Variables" and add these:
+
+DATABASE_URL
+postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+NEXT_PUBLIC_APP_URL
+https://your-app.vercel.app
+(Update after first deploy)
+
+JWT_SECRET
+0jQEi74YZghFGOqHRUbXVKBotpADWfCs
+
+CRON_SECRET
+9c184a08-daba-43cb-9710-3ab9249ec9cb
+
+IMPORTANT: Select BOTH "Production" and "Preview" for each!
+
+═══════════════════════════════════════════════════════════════
+STEP 4: Deploy
+═══════════════════════════════════════════════════════════════
+
+1. Click "Deploy"
+2. Wait 2-3 minutes
+3. Copy your URL (e.g., https://eddie-crm-abc123.vercel.app)
+
+═══════════════════════════════════════════════════════════════
+STEP 5: Update App URL
+═══════════════════════════════════════════════════════════════
+
+1. Go to Settings → Environment Variables
+2. Update NEXT_PUBLIC_APP_URL to your actual URL
+3. Redeploy
+
+═══════════════════════════════════════════════════════════════
+STEP 6: Update JotForm Webhook
+═══════════════════════════════════════════════════════════════
+
+1. Go to: https://form.jotform.com/253266939811163
+2. Settings → Integrations → Webhooks
+3. Update URL to: https://your-url.vercel.app/api/webhooks/jotform
+4. Save
+
+═══════════════════════════════════════════════════════════════
+🎉 DONE! Your Website is Live!
+═══════════════════════════════════════════════════════════════
+
+Your CRM will be at: https://your-app.vercel.app
+
+Login with:
+  Email: admin@eddiecrm.com
+  Password: admin123
+
+═══════════════════════════════════════════════════════════════
+

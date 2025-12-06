@@ -1,0 +1,85 @@
+Copy these to Vercel → Settings → Environment Variables
+
+========================================
+REQUIRED VARIABLES (Add to BOTH Production and Preview)
+========================================
+
+DATABASE_URL
+postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+NEXT_PUBLIC_APP_URL
+https://your-app.vercel.app
+(Update this after first deployment with your actual URL)
+
+JWT_SECRET
+0jQEi74YZghFGOqHRUbXVKBotpADWfCs
+
+CRON_SECRET
+9c184a08-daba-43cb-9710-3ab9249ec9cb
+
+========================================
+OPTIONAL VARIABLES (Add if you want email/SMS)
+========================================
+
+SMTP_HOST
+smtp.gmail.com
+
+SMTP_PORT
+587
+
+SMTP_SECURE
+false
+
+SMTP_USER
+your-email@gmail.com
+
+SMTP_PASSWORD
+your-app-password
+
+SMTP_FROM_EMAIL
+noreply@yourdomain.com
+
+TWILIO_ACCOUNT_SID
+ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+TWILIO_AUTH_TOKEN
+your-auth-token
+
+TWILIO_PHONE_NUMBER
++1234567890
+
+SUPPORT_PHONE
++1234567890
+
+SUPPORT_EMAIL
+support@yourdomain.com
+
+SUPPORT_CHAT_URL
+https://support.yourdomain.com
+
+========================================
+INSTRUCTIONS
+========================================
+
+1. Go to vercel.com
+2. Create account / Login
+3. Click "New Project"
+4. Import your GitHub repository
+5. Go to "Environment Variables"
+6. Add each variable above
+7. Make sure to select BOTH "Production" and "Preview"
+8. Click "Deploy"
+9. Wait for build (2-3 minutes)
+10. Copy your deployment URL
+11. Update NEXT_PUBLIC_APP_URL to your actual URL
+12. Redeploy
+
+========================================
+YOUR ADMIN CREDENTIALS
+========================================
+
+Email: admin@eddiecrm.com
+Password: admin123
+
+========================================
+

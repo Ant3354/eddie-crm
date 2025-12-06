@@ -1,0 +1,301 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"  // Changed to PostgreSQL for production
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  role          String   @default("AGENT") // ADMIN, AGENT, CONTRACTOR
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  auditLogs     AuditLog[]
+}
+
+model Contact {
+  id                String        @id @default(cuid())
+  firstName         String
+  lastName          String
+  email             String?
+  mobilePhone       String?
+  address           String?
+  languagePreference String?      @default("English")
+  category          String // CONSUMER, DENTAL_OFFICE_PARTNER, HEALTH_OFFICE_PARTNER, OTHER_BUSINESS_PARTNER, PROSPECT
+  status            String @default("LEAD") // LEAD, SCHEDULED, ENROLLED, ACTIVE_CLIENT
+  emailOptIn        Boolean       @default(false)
+  smsOptIn          Boolean       @default(false)
+  paymentIssueAlert Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  enrolledDate      DateTime?
+  renewalDate       DateTime?
+  
+  // Relations
+  tags              ContactTag[]
+  policies          Policy[]
+  tasks             Task[]
+  files             File[]
+  campaigns         CampaignContact[]
+  auditLogs         AuditLog[]
+  referralLink      ReferralLink?
+  referralConversions ReferralConversion[]
+  
+  @@index([category])
+  @@index([status])
+  @@index([paymentIssueAlert])
+}
+
+
+model ContactTag {
+  id        String   @id @default(cuid())
+  name      String
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  
+  @@unique([contactId, name])
+  @@index([name])
+}
+
+model Policy {
+  id              String   @id @default(cuid())
+  contactId       String
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  carrier         String?
+  planType        String?
+  monthlyPremium  Float?
+  effectiveDate   DateTime?
+  renewalDate     DateTime?
+  paymentStatus   String @default("GOOD") // GOOD, FAILED, AT_RISK
+  memberPortalLink String?
+  pharmacyLink    String?
+  riderBenefitsLink String?
+  beneficiaryInfo String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([contactId])
+  @@index([paymentStatus])
+}
+
+
+model Task {
+  id          String       @id @default(cuid())
+  contactId   String?
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  priority    String @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status      String @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  assignedTo  String?
+  
+  @@index([contactId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+
+model File {
+  id          String   @id @default(cuid())
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  fileName    String
+  filePath    String
+  fileType    String
+  fileSize    Int
+  isParsed    Boolean  @default(false)
+  parseResult String? // Stores parsed data and confidence scores as JSON string
+  createdAt   DateTime @default(now())
+  
+  @@index([contactId])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String // CONSUMER, DENTAL_OFFICE_PARTNER, HEALTH_OFFICE_PARTNER, OTHER_BUSINESS_PARTNER, PROSPECT
+  type        String // REFERRAL_DRIP, PORTAL_REDIRECT, FAILED_PAYMENT, NURTURE, RENEWAL, CUSTOM
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  contacts   CampaignContact[]
+  steps      CampaignStep[]
+}
+
+
+model CampaignStep {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepOrder  Int
+  triggerDays Int?     // Days after enrollment/trigger
+  channel     String // EMAIL, SMS, TASK
+  subject     String?
+  content     String
+  templateId  String?
+  createdAt   DateTime @default(now())
+  
+  @@index([campaignId])
+}
+
+
+model CampaignContact {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId   String
+  contact     Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status      String @default("PENDING") // PENDING, ACTIVE, PAUSED, COMPLETED, CANCELLED
+  currentStep Int      @default(0)
+  lastSentAt  DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([campaignId, contactId])
+  @@index([contactId])
+  @@index([status])
+}
+
+
+model EmailLog {
+  id          String   @id @default(cuid())
+  contactId   String?
+  to          String
+  subject     String
+  content     String
+  status      String @default("PENDING") // PENDING, SENT, FAILED, BOUNCED
+  sentAt      DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  
+  @@index([contactId])
+  @@index([status])
+}
+
+
+model SmsLog {
+  id          String   @id @default(cuid())
+  contactId   String?
+  to          String
+  message     String
+  status      String @default("PENDING") // PENDING, SENT, FAILED, DELIVERED
+  sentAt      DateTime?
+  error       String?
+  createdAt   DateTime @default(now())
+  
+  @@index([contactId])
+  @@index([status])
+}
+
+
+model QrCode {
+  id          String   @id @default(cuid())
+  source      String   // Airport, Dental Office, etc.
+  jotFormUrl  String
+  qrCodeUrl   String   // Generated QR code image path
+  scanCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  
+  @@index([source])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  action      String   // VIEW, EDIT, DELETE, etc.
+  fieldName   String?  // For field-level tracking (SSN, DOB)
+  oldValue    String?
+  newValue    String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([contactId])
+  @@index([fieldName])
+  @@index([createdAt])
+}
+
+model SensitiveData {
+  id          String   @id @default(cuid())
+  contactId   String   @unique
+  dob         String?  // Encrypted
+  ssn         String?  // Encrypted
+  encryptedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([contactId])
+}
+
+model ReferralLink {
+  id              String   @id @default(cuid())
+  contactId       String   @unique
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  referralCode    String   @unique
+  referralUrl     String
+  clickCount      Int      @default(0)
+  conversionCount Int      @default(0)
+  lastClickedAt   DateTime?
+  lastConvertedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  clicks      ReferralClick[]
+  conversions ReferralConversion[]
+  
+  @@index([contactId])
+  @@index([referralCode])
+}
+
+model ReferralClick {
+  id            String       @id @default(cuid())
+  referralLinkId String
+  referralLink  ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
+  source        String?
+  clickedAt     DateTime     @default(now())
+  
+  @@index([referralLinkId])
+  @@index([clickedAt])
+}
+
+model ReferralConversion {
+  id            String       @id @default(cuid())
+  referralLinkId String
+  referralLink  ReferralLink @relation(fields: [referralLinkId], references: [id], onDelete: Cascade)
+  newContactId  String
+  newContact    Contact      @relation(fields: [newContactId], references: [id], onDelete: Cascade)
+  convertedAt   DateTime     @default(now())
+  
+  @@index([referralLinkId])
+  @@index([newContactId])
+  @@index([convertedAt])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  subject     String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
