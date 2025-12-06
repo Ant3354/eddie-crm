@@ -1,0 +1,14 @@
+# Ignore files that shouldn't be deployed
+node_modules
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+prisma/dev.db
+prisma/dev.db-journal
+public/qrcodes/*.png
+server-startup.log
+*.md
+!README.md
+
