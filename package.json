@@ -27,6 +27,7 @@
     "deploy:prod": "powershell -ExecutionPolicy Bypass -File scripts/deploy-production.ps1",
     "smoke": "node scripts/smoke-test.mjs",
     "test:deep-api": "node scripts/deep-api-test.mjs",
+    "test:jotform": "node scripts/test-jotform-api.mjs",
     "test:e2e": "playwright test",
     "test:deep": "npm run smoke && npm run test:deep-api && npm run test:e2e"
   },

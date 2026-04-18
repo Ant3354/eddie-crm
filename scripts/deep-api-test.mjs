@@ -86,6 +86,7 @@ async function main() {
   await expectOk('POST /api/campaigns/process', 'POST', '/api/campaigns/process')
   await expectOk('GET /api/cron/process-campaigns', 'GET', '/api/cron/process-campaigns')
   await expectOk('POST /api/cron/process-campaigns', 'POST', '/api/cron/process-campaigns')
+  await expectOk('GET /api/integrations/jotform', 'GET', '/api/integrations/jotform')
   await expectOk('GET /api/webhooks/jotform/log', 'GET', '/api/webhooks/jotform/log')
   await expectOk('GET /api/webhooks/jotform/debug', 'GET', '/api/webhooks/jotform/debug')
   await expectOk('GET /api/webhooks/jotform/test-form', 'GET', '/api/webhooks/jotform/test-form')

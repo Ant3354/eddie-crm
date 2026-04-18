@@ -2,7 +2,19 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Webhook, Mail, MessageSquare, Play, Copy, CheckCircle2, ExternalLink, Code, WifiOff } from 'lucide-react'
+import {
+  Settings,
+  Webhook,
+  Mail,
+  MessageSquare,
+  Play,
+  Copy,
+  CheckCircle2,
+  ExternalLink,
+  Code,
+  WifiOff,
+  Loader2,
+} from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { readOfflineModeFromEnv, setOfflineModeOverride, useOfflineMode, OFFLINE_MODE_EVENT } from '@/lib/offline-mode'
 
@@ -24,6 +36,8 @@ export default function IntegrationsPage() {
   }, [])
 
   const [copied, setCopied] = useState<string | null>(null)
+  const [jotformApiLoading, setJotformApiLoading] = useState(false)
+  const [jotformApiJson, setJotformApiJson] = useState<string | null>(null)
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
@@ -151,6 +165,58 @@ export default function IntegrationsPage() {
                 <p className="text-xs text-blue-800 dark:text-blue-300">
                   <strong>Setup:</strong> Copy this URL and paste it into your JotForm webhook settings. All form submissions will automatically create contacts in your CRM.
                 </p>
+              </div>
+              <div className="border-t border-blue-200/60 dark:border-blue-800/60 pt-4 space-y-3">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <strong>API key (read forms & submissions):</strong> add{' '}
+                  <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">JOTFORM_API_KEY</code> to{' '}
+                  <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">.env.local</code> (dev) or Vercel env
+                  (production). Optionally set <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">JOTFORM_FORM_ID</code>{' '}
+                  for which form to sample submissions from (defaults to your first form).
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={jotformApiLoading}
+                  onClick={async () => {
+                    setJotformApiLoading(true)
+                    setJotformApiJson(null)
+                    try {
+                      const res = await fetch('/api/integrations/jotform')
+                      const data = await res.json()
+                      setJotformApiJson(JSON.stringify(data, null, 2))
+                    } catch (e) {
+                      setJotformApiJson(
+                        JSON.stringify(
+                          { ok: false, message: e instanceof Error ? e.message : 'Request failed' },
+                          null,
+                          2
+                        )
+                      )
+                    } finally {
+                      setJotformApiLoading(false)
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  {jotformApiLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Testing…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Test JotForm API
+                    </>
+                  )}
+                </Button>
+                {jotformApiJson ? (
+                  <pre className="max-h-64 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 p-3 text-[11px] leading-relaxed">
+                    {jotformApiJson}
+                  </pre>
+                ) : null}
               </div>
             </CardContent>
           </Card>
