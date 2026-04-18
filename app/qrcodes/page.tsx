@@ -33,7 +33,11 @@ interface PublicConfig {
 
 export default function QRCodesPage() {
   const offlineUi = useOfflineMode()
-  const [jotFormUrl, setJotFormUrl] = useState('')
+  const [jotFormUrl, setJotFormUrl] = useState(
+    () =>
+      process.env.NEXT_PUBLIC_JOTFORM_URL?.trim() ||
+      'https://form.jotform.com/253266939811163'
+  )
   const [source, setSource] = useState('')
   const [useLocalIntake, setUseLocalIntake] = useState(false)
   const [qrCode, setQrCode] = useState<{ qrCodeUrl: string; qrCodeId: string } | null>(null)
@@ -189,7 +193,12 @@ export default function QRCodesPage() {
             <p className="mt-3 text-sm font-medium text-emerald-800 dark:text-emerald-300 max-w-2xl mx-auto">
               Offline / LAN workflow is on — use print sheets and local intake; server email and SMS sends are hidden elsewhere.
             </p>
-          ) : null}
+          ) : (
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              <strong>Online mode:</strong> your JotForm URL is prefilled below. Choose <strong>JotForm (online)</strong>, pick a
+              source location, and generate — phones use the internet and your JotForm webhook fills the CRM.
+            </p>
+          )}
         </div>
 
         {publicConfig ? (
@@ -290,120 +299,6 @@ export default function QRCodesPage() {
             </Card>
           </>
         ) : null}
-
-        <Card className="mb-6 bg-white/90 dark:bg-gray-800/90 border-2 border-slate-200 dark:border-slate-600 shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-slate-700 dark:text-slate-300" />
-              Completely offline? Use a text QR (simplest for strangers)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
-            <p>
-              A normal QR that opens your <strong>local intake webpage</strong> only works if the phone can reach your
-              computer (same Wi‑Fi, or a tunnel). If the client wants <strong>no internet and no tunnel</strong>, that
-              webpage cannot load on a random passer‑by&apos;s phone — that&apos;s a physical limit, not something we can
-              patch around.
-            </p>
-            <ul className="list-disc pl-5 space-y-1 text-gray-600 dark:text-gray-400">
-              <li>
-                <strong>Text QR (below):</strong> encodes a short message. Any phone can scan it offline; the camera app
-                shows your offer + phone number. No CRM link — use paper intake at the booth, then type leads into the
-                CRM later.
-              </li>
-              <li>
-                <strong>Same room only:</strong> turn on Windows &quot;Mobile hotspot&quot;, put{' '}
-                <code className="text-xs">NEXT_PUBLIC_APP_URL</code> to that hotspot address, then use &quot;Local
-                intake&quot; QRs so phones on <em>that</em> Wi‑Fi can open the form.
-              </li>
-              <li>
-                <strong>Print:</strong> use &quot;Print QR sheet&quot; on a tracked QR so staff have a paper backup at
-                events.
-              </li>
-              <li>
-                <strong>Full dental form with no Wi‑Fi:</strong> a QR code cannot store the whole form (size limit). Use
-                the standalone page below — same fields as the online intake (including{' '}
-                <strong>source location</strong>: Airport, Dental Office, Health Office, Event, Website, Other), with
-                &quot;email Francisco&quot; at the bottom. Staff can AirDrop the file, put it on a USB drive, or add a link
-                in email; guests save it to the phone and fill it offline.
-              </li>
-            </ul>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/offline-intake-paper.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={cn(
-                  buttonVariants({ variant: 'outline' }),
-                  'border-teal-600 text-teal-800 dark:text-teal-300 inline-flex'
-                )}
-              >
-                Open offline dental form (save / print / email Francisco)
-              </Link>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Tip: In the browser, use <strong>Save page as</strong> so the file works with no connection. The form is
-              static HTML only — data is not sent to the CRM until someone types it in or receives your email.
-            </p>
-            <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900/50 p-4 space-y-3">
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">
-                Message inside the QR (plain text)
-              </label>
-              <textarea
-                className="w-full min-h-[100px] px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
-                placeholder="Example: Dental savings plan — ask for Eddie. Call (555) 123-4567. Visit our table for a paper intake form."
-                value={textQrBody}
-                onChange={(e) => {
-                  setTextQrBody(e.target.value)
-                  setTextQrDataUrl(null)
-                  setTextQrError('')
-                }}
-                maxLength={TEXT_QR_MAX}
-              />
-              <div className="flex flex-wrap items-center gap-2 justify-between">
-                <span className="text-xs text-gray-500">
-                  {textQrBody.length}/{TEXT_QR_MAX} — shorter scans more easily
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={textQrLoading}
-                  onClick={() => void handleGenerateTextQr()}
-                  className="shrink-0"
-                >
-                  {textQrLoading ? 'Building…' : 'Create text QR'}
-                </Button>
-              </div>
-              {textQrError ? <p className="text-xs text-red-600 dark:text-red-400">{textQrError}</p> : null}
-              {textQrDataUrl ? (
-                <div className="flex flex-col sm:flex-row gap-4 items-center pt-2">
-                  <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <img src={textQrDataUrl} alt="Text-only marketing QR" className="w-48 h-48" />
-                  </div>
-                  <div className="flex-1 space-y-2 text-xs text-gray-600 dark:text-gray-400">
-                    <p>
-                      Scanning shows this text in the QR reader — <strong>not</strong> your intake form. For full forms
-                      into the CRM without internet, use paper or same‑Wi‑Fi intake above.
-                    </p>
-                    <Button
-                      type="button"
-                      className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white"
-                      onClick={() => {
-                        const a = document.createElement('a')
-                        a.href = textQrDataUrl
-                        a.download = 'offline-marketing-qr.png'
-                        a.click()
-                      }}
-                    >
-                      <Download className="w-4 h-4 mr-2 inline" />
-                      Download PNG
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Generator Form */}
@@ -733,6 +628,123 @@ export default function QRCodesPage() {
           </CardContent>
         </Card>
 
+        <Card className="mt-6 bg-white/90 dark:bg-gray-800/90 border-2 border-slate-200 dark:border-slate-600 shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+              Optional: offline / paper workflows
+            </CardTitle>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Use these when you are <strong>not</strong> using JotForm online QRs. Online generation is above.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+            <p>
+              A normal QR that opens your <strong>local intake webpage</strong> only works if the phone can reach your
+              computer (same Wi‑Fi, or a tunnel). If the client wants <strong>no internet and no tunnel</strong>, that
+              webpage cannot load on a random passer‑by&apos;s phone — that&apos;s a physical limit, not something we can
+              patch around.
+            </p>
+            <ul className="list-disc pl-5 space-y-1 text-gray-600 dark:text-gray-400">
+              <li>
+                <strong>Text QR (below):</strong> encodes a short message. Any phone can scan it offline; the camera app
+                shows your offer + phone number. No CRM link — use paper intake at the booth, then type leads into the
+                CRM later.
+              </li>
+              <li>
+                <strong>Same room only:</strong> turn on Windows &quot;Mobile hotspot&quot;, put{' '}
+                <code className="text-xs">NEXT_PUBLIC_APP_URL</code> to that hotspot address, then use &quot;Local
+                intake&quot; QRs so phones on <em>that</em> Wi‑Fi can open the form.
+              </li>
+              <li>
+                <strong>Print:</strong> use &quot;Print QR sheet&quot; on a tracked QR so staff have a paper backup at
+                events.
+              </li>
+              <li>
+                <strong>Full dental form with no Wi‑Fi:</strong> a QR code cannot store the whole form (size limit). Use
+                the standalone page below — same fields as the online intake (including{' '}
+                <strong>source location</strong>: Airport, Dental Office, Health Office, Event, Website, Other), with
+                &quot;email Francisco&quot; at the bottom. Staff can AirDrop the file, put it on a USB drive, or add a link
+                in email; guests save it to the phone and fill it offline.
+              </li>
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/offline-intake-paper.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  buttonVariants({ variant: 'outline' }),
+                  'border-teal-600 text-teal-800 dark:text-teal-300 inline-flex'
+                )}
+              >
+                Open offline dental form (save / print / email Francisco)
+              </Link>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Tip: In the browser, use <strong>Save page as</strong> so the file works with no connection. The form is
+              static HTML only — data is not sent to the CRM until someone types it in or receives your email.
+            </p>
+            <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900/50 p-4 space-y-3">
+              <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">
+                Message inside the QR (plain text)
+              </label>
+              <textarea
+                className="w-full min-h-[100px] px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
+                placeholder="Example: Dental savings plan — ask for Eddie. Call (555) 123-4567. Visit our table for a paper intake form."
+                value={textQrBody}
+                onChange={(e) => {
+                  setTextQrBody(e.target.value)
+                  setTextQrDataUrl(null)
+                  setTextQrError('')
+                }}
+                maxLength={TEXT_QR_MAX}
+              />
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                <span className="text-xs text-gray-500">
+                  {textQrBody.length}/{TEXT_QR_MAX} — shorter scans more easily
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={textQrLoading}
+                  onClick={() => void handleGenerateTextQr()}
+                  className="shrink-0"
+                >
+                  {textQrLoading ? 'Building…' : 'Create text QR'}
+                </Button>
+              </div>
+              {textQrError ? <p className="text-xs text-red-600 dark:text-red-400">{textQrError}</p> : null}
+              {textQrDataUrl ? (
+                <div className="flex flex-col sm:flex-row gap-4 items-center pt-2">
+                  <div className="p-3 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <img src={textQrDataUrl} alt="Text-only marketing QR" className="w-48 h-48" />
+                  </div>
+                  <div className="flex-1 space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                    <p>
+                      Scanning shows this text in the QR reader — <strong>not</strong> your intake form. For full forms
+                      into the CRM without internet, use paper or same‑Wi‑Fi intake above.
+                    </p>
+                    <Button
+                      type="button"
+                      className="w-full sm:w-auto bg-green-700 hover:bg-green-800 text-white"
+                      onClick={() => {
+                        const a = document.createElement('a')
+                        a.href = textQrDataUrl
+                        a.download = 'offline-marketing-qr.png'
+                        a.click()
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2 inline" />
+                      Download PNG
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Info Section */}
         <Card className="mt-6 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-gray-200/50 dark:border-gray-700/50 shadow-xl">
           <CardHeader>
@@ -743,8 +755,8 @@ export default function QRCodesPage() {
               <div>
                 <div className="font-semibold text-gray-900 dark:text-white mb-1">1. Generate</div>
                 <p>
-                  JotForm for online; local intake for same‑Wi‑Fi / LAN; or a <strong>text QR</strong> above for
-                  marketing with zero internet to your PC
+                  <strong>JotForm (online)</strong> by default — prefilled URL, pick source, generate. Or use local intake
+                  for same‑Wi‑Fi / LAN; optional <strong>text QR</strong> below for booths with no internet to your PC.
                 </p>
               </div>
               <div>
