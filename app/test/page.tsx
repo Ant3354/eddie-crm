@@ -24,6 +24,14 @@ export default function TestPage() {
       const endpoint = testType === 'requirements' ? '/api/test-all-requirements' : '/api/test'
       const res = await fetch(endpoint)
       const data = await res.json()
+      if (data && !data.summary && data.tests && typeof data.tests === 'object') {
+        const vals = Object.values(data.tests) as TestResult[]
+        data.summary = {
+          total: vals.length,
+          passed: vals.filter((t) => t?.status === 'PASS').length,
+          failed: vals.filter((t) => t?.status === 'FAIL').length,
+        }
+      }
       setResults(data)
     } catch (error: any) {
       setResults({
@@ -121,14 +129,14 @@ export default function TestPage() {
             </CardContent>
           </Card>
 
-          {results.errors && results.errors.length > 0 && (
+          {Array.isArray(results.errors) && results.errors.length > 0 && (
             <Card className="border-red-500">
               <CardHeader>
                 <CardTitle className="text-red-600">Errors</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="list-disc list-inside space-y-1">
-                  {results.errors.map((error: string, index: number) => (
+                  {(results.errors as string[]).map((error: string, index: number) => (
                     <li key={index} className="text-red-600">{error}</li>
                   ))}
                 </ul>

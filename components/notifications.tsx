@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Bell, AlertTriangle, Clock, X } from 'lucide-react'
 import Link from 'next/link'
+import { asArray } from '@/lib/as-array'
 
 interface Notification {
   id: string
@@ -29,8 +30,12 @@ export function Notifications() {
       const res = await fetch('/api/notifications')
       if (res.ok) {
         const data = await res.json()
-        setNotifications(data.notifications || [])
-        setUnreadCount(data.unreadCount || 0)
+        const list = asArray<Notification>(data?.notifications)
+        setNotifications(list)
+        setUnreadCount(typeof data?.unreadCount === 'number' ? data.unreadCount : list.length)
+      } else {
+        setNotifications([])
+        setUnreadCount(0)
       }
     } catch (error) {
       console.error('Failed to load notifications:', error)

@@ -29,20 +29,14 @@ export default function Home() {
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link
-              href="/register"
-              className="px-10 py-4 bg-gradient-to-r from-green-500 via-emerald-600 to-teal-600 hover:from-green-600 hover:via-emerald-700 hover:to-teal-700 text-white font-bold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 text-lg relative overflow-hidden group"
+              href="/dashboard"
+              className="px-10 py-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 text-lg relative overflow-hidden group"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></span>
               <span className="relative z-10 flex items-center gap-2">
-                Create Free Account
+                Open dashboard
                 <span className="text-xl">→</span>
               </span>
-            </Link>
-            <Link
-              href="/login"
-              className="px-10 py-4 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-gray-900 dark:text-white font-bold rounded-2xl shadow-xl hover:shadow-2xl border-2 border-gray-200/50 dark:border-gray-700/50 transition-all duration-300 transform hover:scale-105 active:scale-95 text-lg backdrop-blur-sm"
-            >
-              Sign In
             </Link>
           </div>
         </div>

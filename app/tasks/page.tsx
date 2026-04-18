@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckSquare2, Plus, Clock, AlertCircle, CheckCircle2, XCircle, User, Calendar, Flag } from 'lucide-react'
+import { asArray } from '@/lib/as-array'
 
 interface Task {
   id: string
@@ -44,8 +45,9 @@ export default function TasksPage() {
   async function loadContacts() {
     try {
       const res = await fetch('/api/contacts')
-      const data = await res.json()
-      setContacts(data.map((c: any) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName })))
+      const raw = await res.json()
+      const data = asArray<{ id: string; firstName: string; lastName: string }>(raw)
+      setContacts(data.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName })))
     } catch (error) {
       console.error('Failed to load contacts:', error)
     }
@@ -91,25 +93,26 @@ export default function TasksPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/tasks')
-      const data = await res.json()
+      const raw = await res.json()
+      const data = asArray<Task>(raw)
       let filtered = data
-      
+
       if (filter.status) {
-        filtered = filtered.filter((t: Task) => t.status === filter.status)
+        filtered = filtered.filter((t) => t.status === filter.status)
       }
       if (filter.priority) {
-        filtered = filtered.filter((t: Task) => t.priority === filter.priority)
+        filtered = filtered.filter((t) => t.priority === filter.priority)
       }
-      
+
       setTasks(filtered)
-      
+
       const now = new Date()
       setStats({
         total: data.length,
-        pending: data.filter((t: Task) => t.status === 'PENDING').length,
-        urgent: data.filter((t: Task) => t.priority === 'URGENT').length,
-        overdue: data.filter((t: Task) => 
-          t.status === 'PENDING' && t.dueDate && new Date(t.dueDate) < now
+        pending: data.filter((t) => t.status === 'PENDING').length,
+        urgent: data.filter((t) => t.priority === 'URGENT').length,
+        overdue: data.filter(
+          (t) => t.status === 'PENDING' && t.dueDate && new Date(t.dueDate) < now
         ).length,
       })
     } catch (error) {

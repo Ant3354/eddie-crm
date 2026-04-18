@@ -6,7 +6,26 @@ import Link from 'next/link'
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Users, AlertTriangle, Megaphone, CheckSquare2, MousePointerClick, QrCode, TrendingUp, Activity } from 'lucide-react'
 
+type ChartRow = Record<string, unknown>
+
+interface ChartDataState {
+  contactsByCategory: ChartRow[]
+  contactsByStatus: ChartRow[]
+  referralTrend: ChartRow[]
+  campaignPerformance: ChartRow[]
+}
+
+const emptyCharts: ChartDataState = {
+  contactsByCategory: [],
+  contactsByStatus: [],
+  referralTrend: [],
+  campaignPerformance: [],
+}
+
 export default function DashboardPage() {
+  /** Recharts + ResponsiveContainer can break SSR/hydration; render charts only in the browser. */
+  const [chartsReady, setChartsReady] = useState(false)
+
   const [stats, setStats] = useState({
     totalContacts: 0,
     paymentAlerts: 0,
@@ -16,17 +35,16 @@ export default function DashboardPage() {
     referralConversions: 0,
     qrScans: 0,
   })
-  const [chartData, setChartData] = useState({
-    contactsByCategory: [],
-    contactsByStatus: [],
-    referralTrend: [],
-    campaignPerformance: [],
-  })
+  const [chartData, setChartData] = useState<ChartDataState>(emptyCharts)
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
 
   useEffect(() => {
     loadStats()
+  }, [])
+
+  useEffect(() => {
+    setChartsReady(true)
   }, [])
 
   async function loadStats() {
@@ -40,26 +58,61 @@ export default function DashboardPage() {
         fetch('/api/analytics'),
       ])
 
-      const contacts = await contactsRes.json()
-      const campaigns = await campaignsRes.json()
-      const tasks = await tasksRes.json()
-      const referralStats = await referralRes.json().catch(() => ({ totalClicks: 0, totalConversions: 0 }))
-      const qrStats = await qrRes.json().catch(() => ({ totalScans: 0 }))
-      const analytics = await analyticsRes.json().catch(() => ({
-        contactsByCategory: [],
-        contactsByStatus: [],
-        referralTrend: [],
-        campaignPerformance: [],
-      }))
+      const parseArr = async (res: Response) => {
+        if (!res.ok) return []
+        try {
+          const data = await res.json()
+          return Array.isArray(data) ? data : []
+        } catch {
+          return []
+        }
+      }
+
+      const contacts = await parseArr(contactsRes)
+      const campaigns = await parseArr(campaignsRes)
+      const tasks = await parseArr(tasksRes)
+
+      let referralStats: { totalClicks?: number; totalConversions?: number } = {}
+      if (referralRes.ok) {
+        try {
+          referralStats = await referralRes.json()
+        } catch {
+          referralStats = {}
+        }
+      }
+
+      let qrStats: { totalScans?: number } = {}
+      if (qrRes.ok) {
+        try {
+          qrStats = await qrRes.json()
+        } catch {
+          qrStats = {}
+        }
+      }
+
+      let analytics: ChartDataState = { ...emptyCharts }
+      if (analyticsRes.ok) {
+        try {
+          const raw = await analyticsRes.json()
+          analytics = {
+            contactsByCategory: Array.isArray(raw.contactsByCategory) ? raw.contactsByCategory : [],
+            contactsByStatus: Array.isArray(raw.contactsByStatus) ? raw.contactsByStatus : [],
+            referralTrend: Array.isArray(raw.referralTrend) ? raw.referralTrend : [],
+            campaignPerformance: Array.isArray(raw.campaignPerformance) ? raw.campaignPerformance : [],
+          }
+        } catch {
+          /* keep defaults */
+        }
+      }
 
       setStats({
         totalContacts: contacts.length,
         paymentAlerts: contacts.filter((c: any) => c.paymentIssueAlert).length,
         activeCampaigns: campaigns.filter((c: any) => c.isActive).length,
         pendingTasks: tasks.filter((t: any) => t.status === 'PENDING').length,
-        referralClicks: referralStats.totalClicks || 0,
-        referralConversions: referralStats.totalConversions || 0,
-        qrScans: qrStats.totalScans || 0,
+        referralClicks: referralStats.totalClicks ?? 0,
+        referralConversions: referralStats.totalConversions ?? 0,
+        qrScans: qrStats.totalScans ?? 0,
       })
 
       setChartData(analytics)
@@ -199,7 +252,13 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Charts Section */}
+      {/* Charts: client-only after mount (Recharts + SSR) */}
+      {!chartsReady ? (
+        <div className="mt-8 rounded-xl border border-gray-200/80 dark:border-gray-700/80 bg-white/60 dark:bg-gray-900/40 px-4 py-8 text-center text-sm text-gray-600 dark:text-gray-400">
+          Loading charts…
+        </div>
+      ) : null}
+      {chartsReady ? (
       <div className="grid md:grid-cols-2 gap-6 mt-8">
         <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-gray-200/50 dark:border-gray-700/50 shadow-xl hover:shadow-2xl transition-all duration-500">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 dark:from-blue-500/10 dark:to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -401,6 +460,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      ) : null}
       </div>
     </div>
   )

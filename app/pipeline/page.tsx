@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LayoutGrid, Users, ArrowLeft } from 'lucide-react'
+import { asArray } from '@/lib/as-array'
 
 interface Contact {
   id: string
@@ -28,7 +29,8 @@ export default function PipelinePage() {
     setLoading(true)
     try {
       const res = await fetch('/api/contacts')
-      const data: Contact[] = await res.json()
+      const raw = await res.json()
+      const data = asArray<Contact>(raw)
       const grouped: Record<string, Contact[]> = { LEAD: [], SCHEDULED: [], ENROLLED: [], ACTIVE_CLIENT: [] }
       for (const c of data) {
         if (!grouped[c.status]) grouped[c.status] = []

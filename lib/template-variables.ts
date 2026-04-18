@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { generateReferralLink } from './referral-links'
+import { getPublicAppOrigin } from './app-origin'
 
 export async function replaceTemplateVariables(
   content: string,
@@ -23,7 +24,7 @@ export async function replaceTemplateVariables(
   }
 
   const policy = contact.policies[0]
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = getPublicAppOrigin()
 
   // Get referral link
   const referralLink = await generateReferralLink(contactId)

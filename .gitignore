@@ -7,6 +7,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -37,4 +39,22 @@ next-env.d.ts
 
 # prisma
 /prisma/migrations
+# local SQLite (never push real data)
+/prisma/dev.db
+/prisma/.next/
+
+# logs & local agent notes
+server-startup.log
+build-fixes.log
+agent-implementation-log.txt
+smoke-test-report.json
+deep-api-test-report.json
+
+# generated QR images (dev)
+/public/qrcodes/*.png
+
+# Windows desktop installer output
+/release/
+/dist/
+/vendor/
 

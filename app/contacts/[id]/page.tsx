@@ -8,9 +8,11 @@ import { ActivityTimeline } from '@/components/activity-timeline'
 import { 
   User, Mail, Phone, MapPin, Globe, Tag, Edit, ArrowLeft, Upload, Send, 
   FileText, CreditCard, CheckSquare2, TrendingUp, Copy, CheckCircle2, 
-  AlertTriangle, Calendar, Building2, DollarSign, Shield, Sparkles
+  AlertTriangle, Calendar, Building2, DollarSign, Shield, Sparkles, Printer, MessageSquare
 } from 'lucide-react'
 import Link from 'next/link'
+import { asArray } from '@/lib/as-array'
+import { useOfflineMode } from '@/lib/offline-mode'
 
 interface Contact {
   id: string
@@ -36,6 +38,7 @@ interface Contact {
 export default function ContactDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const offlineUi = useOfflineMode()
   const [contact, setContact] = useState<Contact | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -55,7 +58,7 @@ export default function ContactDetailPage() {
       const res = await fetch(`/api/contacts/${params.id}/activity`)
       if (res.ok) {
         const data = await res.json()
-        setActivities(data)
+        setActivities(asArray(data))
       }
     } catch (error) {
       console.error('Failed to load activities:', error)
@@ -79,19 +82,30 @@ export default function ContactDetailPage() {
     try {
       const res = await fetch(`/api/contacts/${params.id}`)
       const data = await res.json()
-      setContact(data)
+      if (!res.ok || !data || typeof (data as Contact).id !== 'string') {
+        setContact(null)
+        return
+      }
+      const normalized: Contact = {
+        ...(data as Contact),
+        tags: asArray((data as Contact).tags),
+        policies: asArray((data as Contact).policies),
+        tasks: asArray((data as Contact).tasks),
+        files: asArray((data as Contact).files),
+      }
+      setContact(normalized)
       setFormData({
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email || '',
-        mobilePhone: data.mobilePhone || '',
-        address: data.address || '',
-        languagePreference: data.languagePreference || 'English',
-        category: data.category,
-        status: data.status,
-        emailOptIn: data.emailOptIn,
-        smsOptIn: data.smsOptIn,
-        paymentIssueAlert: data.paymentIssueAlert,
+        firstName: normalized.firstName,
+        lastName: normalized.lastName,
+        email: normalized.email || '',
+        mobilePhone: normalized.mobilePhone || '',
+        address: normalized.address || '',
+        languagePreference: normalized.languagePreference || 'English',
+        category: normalized.category,
+        status: normalized.status,
+        emailOptIn: normalized.emailOptIn,
+        smsOptIn: normalized.smsOptIn,
+        paymentIssueAlert: normalized.paymentIssueAlert,
       })
     } catch (error) {
       console.error('Failed to load contact:', error)
@@ -165,6 +179,50 @@ export default function ContactDetailPage() {
       navigator.clipboard.writeText(referralStats.referralUrl)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  function buildPortalPlainText(c: Contact) {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const pol = c.policies?.[0]
+    const portalLine =
+      pol?.memberPortalLink || `${origin}/portal?contact=${c.id}`
+    const appt = `${origin}/appointments?contact=${c.id}`
+    return [
+      `Hi ${c.firstName},`,
+      ``,
+      `Member portal: ${portalLine}`,
+      pol?.pharmacyLink ? `Pharmacy / lookup: ${pol.pharmacyLink}` : null,
+      pol?.riderBenefitsLink ? `Rider benefits: ${pol.riderBenefitsLink}` : null,
+      `Schedule: ${appt}`,
+      ``,
+      `— Sent from Eddie CRM (manual)`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  function openPortalMailto(c: Contact) {
+    if (!c.email) return
+    const subject = encodeURIComponent('Your member portal links')
+    const body = encodeURIComponent(buildPortalPlainText(c).slice(0, 1900))
+    window.location.href = `mailto:${c.email}?subject=${subject}&body=${body}`
+  }
+
+  function openPortalSms(c: Contact) {
+    const raw = (c.mobilePhone || '').replace(/\D/g, '')
+    if (!raw) return
+    const normalized = raw.length === 10 ? `+1${raw}` : raw.startsWith('1') && raw.length === 11 ? `+${raw}` : `+${raw.replace(/^\+/, '')}`
+    const body = encodeURIComponent(buildPortalPlainText(c).slice(0, 300))
+    window.location.href = `sms:${normalized}?body=${body}`
+  }
+
+  async function copyPortalPlainText(c: Contact) {
+    try {
+      await navigator.clipboard.writeText(buildPortalPlainText(c))
+      alert('Portal message copied to clipboard.')
+    } catch {
+      alert('Could not copy — select text manually.')
     }
   }
 
@@ -527,14 +585,55 @@ export default function ContactDetailPage() {
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
                 />
               </div>
-              <Button
-                onClick={handleSendPortalEmail}
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
-                disabled={!contact.email}
-              >
-                <Send className="w-4 h-4 mr-2" />
-                Send Portal Email
-              </Button>
+              {offlineUi ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Offline mode: use your email/SMS apps. Nothing is sent through the server.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-green-600 text-green-800 dark:text-green-300"
+                    disabled={!contact.email}
+                    onClick={() => openPortalMailto(contact)}
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    Open mail draft (portal links)
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-green-600 text-green-800 dark:text-green-300"
+                    disabled={!contact.mobilePhone}
+                    onClick={() => openPortalSms(contact)}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Open SMS with portal summary
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-gray-400"
+                    onClick={() => copyPortalPlainText(contact)}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy portal message
+                  </Button>
+                  <Button type="button" variant="outline" className="w-full border-gray-400" onClick={() => window.print()}>
+                    <Printer className="w-4 h-4 mr-2" />
+                    Print this page
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={handleSendPortalEmail}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                  disabled={!contact.email}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Send Portal Email
+                </Button>
+              )}
             </CardContent>
           </Card>
 

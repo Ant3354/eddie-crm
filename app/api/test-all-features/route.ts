@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getInternalAppOrigin } from '@/lib/app-origin'
 
 export async function GET() {
   const results: any = {
@@ -11,7 +12,8 @@ export async function GET() {
   try {
     // Test 1: Analytics Endpoint
     try {
-      const analyticsRes = await fetch('http://localhost:3000/api/analytics').catch(() => null)
+      const base = getInternalAppOrigin()
+      const analyticsRes = await fetch(`${base}/api/analytics`).catch(() => null)
       if (analyticsRes && analyticsRes.ok) {
         const data = await analyticsRes.json()
         results.tests.analytics = { 

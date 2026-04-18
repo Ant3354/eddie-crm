@@ -74,6 +74,33 @@ npm run dev
 ```
 - Default dev port: 3001 (http://localhost:3001)
 
+## Windows desktop app (installer)
+
+The repo can produce a **Windows NSIS installer** that bundles the Next.js **standalone** server and starts it in the background when you open **Eddie CRM** (Electron shell).
+
+1. Install dependencies: `npm install`
+2. Ensure `.env` has a valid `DATABASE_URL` (Postgres) and `JWT_SECRET` — same as normal local run.
+3. Build the app and installer:
+   ```bash
+   npm run build:desktop
+   ```
+4. Output: `release/Eddie CRM-Setup-1.0.0.exe` (run the installer on any Windows PC).
+
+**First run after install:** A `.env` file is created under `%APPDATA%\eddie-crm\`. Edit `DATABASE_URL` and `JWT_SECRET` there, save, then launch **Eddie CRM** again.
+
+**Optional — use a pre-downloaded Electron folder (faster / offline NSIS build):** extract the official `electron-v28.3.3-win32-x64` zip so it contains `electron.exe`, or set:
+
+```powershell
+$env:ELECTRON_DIST = "C:\path\to\electron-v28.3.3-win32-x64"
+npm run build:desktop
+```
+
+The build script uses `electron-builder.config.cjs`, which checks `ELECTRON_DIST`, then `C:\Users\antho\Downloads\electron-v28.3.3-win32-x64`, then `node_modules\electron\dist` for `electron.exe`.
+
+If packaging fails with **symbolic link / winCodeSign** errors, the project sets `forceCodeSigning: false` in `package.json` under `build` so a normal user account can build. (Alternatively: enable **Windows Developer Mode** or run the terminal as Administrator.)
+
+**Offline / LAN dental QR:** On **QR Codes**, choose **Offline / LAN — built-in dental intake** so the QR does not depend on JotForm or a public domain. Set `NEXT_PUBLIC_APP_URL` to your PC’s LAN IP (for phones on the same Wi‑Fi). JotForm mode still needs the internet.
+
 ## Notes
 - Email/SMS run in test mode without credentials (logged to DB)
 - Use managed Postgres for production; avoid SQLite in cloud
@@ -115,7 +142,7 @@ npm run db:seed
 npm run dev
 ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser.
+6. Open [http://localhost:3001](http://localhost:3001) in your browser.
 
 ## Database Management
 

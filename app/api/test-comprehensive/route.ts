@@ -6,6 +6,7 @@ import { generateReferralLink } from '@/lib/referral-links'
 import { replaceTemplateVariables } from '@/lib/template-variables'
 import { sendTestEmail } from '@/lib/email-test'
 import { sendTestSMS } from '@/lib/sms-test'
+import { getPublicAppOrigin } from '@/lib/app-origin'
 
 export async function GET() {
   const results: any = {
@@ -306,7 +307,7 @@ export async function GET() {
           referralLink: {
             create: {
               referralCode: 'NO_CLICKS',
-              referralUrl: 'http://localhost:3000/referral/NO_CLICKS',
+              referralUrl: `${getPublicAppOrigin()}/referral/NO_CLICKS`,
               clickCount: 0, // No clicks
             },
           },

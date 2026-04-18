@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Megaphone, Plus, Play, Pause, Users, Calendar, TrendingUp, Activity, Sparkles } from 'lucide-react'
+import { asArray } from '@/lib/as-array'
 
 interface Campaign {
   id: string
@@ -32,13 +33,14 @@ export default function CampaignsPage() {
     setLoading(true)
     try {
       const res = await fetch('/api/campaigns')
-      const data = await res.json()
+      const raw = await res.json()
+      const data = asArray<Campaign>(raw)
       setCampaigns(data)
-      
+
       setStats({
         total: data.length,
-        active: data.filter((c: Campaign) => c.isActive).length,
-        totalContacts: data.reduce((sum: number, c: Campaign) => sum + (c._count?.contacts || 0), 0),
+        active: data.filter((c) => c.isActive).length,
+        totalContacts: data.reduce((sum, c) => sum + (c._count?.contacts || 0), 0),
       })
     } catch (error) {
       console.error('Failed to load campaigns:', error)

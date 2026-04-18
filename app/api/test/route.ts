@@ -86,7 +86,10 @@ export async function GET() {
 
       // Test 6: QR Code Generation
       try {
-        const qrResult = await generateQRCode('https://form.jotform.com/test', 'Test Source')
+        const qrResult = await generateQRCode({
+          jotFormUrl: 'https://form.jotform.com/test',
+          source: 'Test Source',
+        })
         results.tests.generateQRCode = { status: 'PASS', qrCodeUrl: qrResult.qrCodeUrl }
       } catch (error: any) {
         results.tests.generateQRCode = { status: 'FAIL', error: error.message }

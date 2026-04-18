@@ -6,7 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"  // Changed to PostgreSQL for production
+  // Must match DATABASE_URL (local dev uses prisma/dev.db — see .env)
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 

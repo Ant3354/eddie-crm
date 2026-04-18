@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getInternalAppOrigin, getPublicAppOrigin } from '@/lib/app-origin'
 import { processCampaigns } from '@/lib/campaigns'
 import { startFailedPaymentSequence } from '@/lib/campaigns'
 import { generateReferralLink } from '@/lib/referral-links'
@@ -11,6 +12,7 @@ export async function GET() {
     tests: {},
     errors: [],
   }
+  const internalBase = getInternalAppOrigin()
 
   try {
     // Test 1: Day 10 Escalation in Failed Payment
@@ -106,7 +108,7 @@ export async function GET() {
           referralLink: {
             create: {
               referralCode: 'TEST123',
-              referralUrl: 'http://localhost:3000/referral/TEST123',
+              referralUrl: `${getPublicAppOrigin()}/referral/TEST123`,
               clickCount: 0, // No clicks
             },
           },
@@ -130,11 +132,13 @@ export async function GET() {
 
     // Test 4: Plan Change Trigger
     try {
-      const policyEndpoint = await fetch('http://localhost:3000/api/policies').catch(() => null)
+      const policyRes = await fetch(`${internalBase}/api/policies`).catch(() => null)
       results.tests.planChangeTrigger = {
-        status: 'PASS',
-        message: 'Policy API endpoint exists with plan change detection',
-        endpointExists: true,
+        status: policyRes?.ok ? 'PASS' : 'WARN',
+        message: policyRes?.ok
+          ? 'Policy API responded OK'
+          : 'Policy API not reachable from this process (check INTERNAL_APP_URL / server port)',
+        endpointExists: !!policyRes?.ok,
       }
     } catch (error: any) {
       results.tests.planChangeTrigger = {
@@ -145,12 +149,14 @@ export async function GET() {
 
     // Test 5: Campaign Automation
     try {
-      const processEndpoint = await fetch('http://localhost:3000/api/campaigns/process').catch(() => null)
-      const cronEndpoint = await fetch('http://localhost:3000/api/cron/process-campaigns').catch(() => null)
-      
+      const processRes = await fetch(`${internalBase}/api/campaigns/process`).catch(() => null)
+      const cronRes = await fetch(`${internalBase}/api/cron/process-campaigns`).catch(() => null)
+
       results.tests.campaignAutomation = {
-        status: 'PASS',
-        message: 'Campaign processing endpoints exist',
+        status: processRes != null && cronRes != null ? 'PASS' : 'WARN',
+        message: 'Campaign processing endpoints reachable',
+        processOk: !!processRes?.ok,
+        cronOk: !!cronRes?.ok,
         processEndpoint: '/api/campaigns/process',
         cronEndpoint: '/api/cron/process-campaigns',
         note: 'Set up cron job to call these endpoints hourly',

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Dental intake — works offline. Save or print this file." />
+  <title>Dental intake (offline)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, Segoe UI, sans-serif; max-width: 40rem; margin: 0 auto; padding: 1rem 1.25rem 3rem; line-height: 1.45; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .hint {
+      background: #ecfdf5; border: 1px solid #6ee7b7; color: #064e3b;
+      padding: 0.85rem; border-radius: 0.5rem; font-size: 0.9rem; margin: 1rem 0;
+    }
+    @media (prefers-color-scheme: dark) {
+      .hint { background: #064e3b; border-color: #059669; color: #d1fae5; }
+    }
+    label { display: block; font-weight: 600; margin-top: 0.85rem; font-size: 0.9rem; }
+    input, select, textarea { width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem; margin-top: 0.25rem; border: 1px solid #94a3b8; border-radius: 0.35rem; font-size: 1rem; }
+    .actions {
+      margin-top: 1.75rem; padding: 1.25rem; border: 2px solid #0d9488; border-radius: 0.5rem; background: #f0fdfa;
+    }
+    @media (prefers-color-scheme: dark) {
+      .actions { background: #134e4a; border-color: #2dd4bf; }
+    }
+    .actions h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+    .actions p { margin: 0.35rem 0; font-size: 0.9rem; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+    button {
+      cursor: pointer; padding: 0.55rem 1rem; border-radius: 0.35rem; border: 1px solid #0f766e;
+      background: #0d9488; color: #fff; font-size: 0.95rem; font-weight: 600;
+    }
+    button.secondary { background: #fff; color: #0f766e; }
+    @media (prefers-color-scheme: dark) {
+      button.secondary { background: #115e59; color: #ccfbf1; border-color: #5eead4; }
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0; }
+      input, select, textarea { border: 1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Dental intake</h1>
+  <p class="hint no-print">
+    <strong>Why not inside a QR code?</strong> A QR barcode can only hold a small amount of data — not a full form.
+    This page is a <strong>single file</strong> you can save to your phone (or print), fill out with no Wi‑Fi, then use the
+    buttons at the bottom to email or copy text for Francisco.
+  </p>
+
+  <form id="intakeForm" onsubmit="return false;">
+    <p class="no-print" style="font-size:0.85rem;color:#64748b;">QR / tracking ID (optional — if staff gave you one)</p>
+    <input type="text" id="qrRef" placeholder="Optional code from flyer" autocomplete="off" />
+
+    <label for="sourceLocation">Source location *</label>
+    <p class="no-print" style="font-size:0.8rem;color:#64748b;margin:0 0 0.25rem;">Where you met us or received this form (same choices as the CRM)</p>
+    <select id="sourceLocation" required>
+      <option value="">Select source…</option>
+      <option value="Airport">Airport</option>
+      <option value="Dental Office">Dental Office</option>
+      <option value="Health Office">Health Office</option>
+      <option value="Event">Event</option>
+      <option value="Website">Website</option>
+      <option value="Other">Other</option>
+    </select>
+    <div id="sourceOtherBlock" style="display:none;margin-top:0.5rem;">
+      <label for="sourceOther" style="margin-top:0;">Describe other source</label>
+      <input type="text" id="sourceOther" placeholder="e.g. community fair, radio ad" autocomplete="off" />
+    </div>
+
+    <label for="firstName">First name *</label>
+    <input type="text" id="firstName" required autocomplete="given-name" />
+
+    <label for="lastName">Last name *</label>
+    <input type="text" id="lastName" required autocomplete="family-name" />
+
+    <label for="email">Email</label>
+    <input type="email" id="email" inputmode="email" autocomplete="email" />
+
+    <label for="phone">Phone</label>
+    <input type="tel" id="phone" inputmode="tel" autocomplete="tel" />
+
+    <label for="address">Address or ZIP</label>
+    <input type="text" id="address" autocomplete="street-address" />
+
+    <label for="language">Language</label>
+    <select id="language">
+      <option>English</option>
+      <option>Spanish</option>
+      <option>Other</option>
+    </select>
+
+    <label for="interest">I am a</label>
+    <select id="interest">
+      <option>Prospect</option>
+      <option>Consumer</option>
+      <option>Dental Office</option>
+      <option>Health Office</option>
+      <option>Business Partner</option>
+    </select>
+
+    <label for="appt">Best time to reach you</label>
+    <input type="text" id="appt" placeholder="e.g. weekday mornings" />
+
+    <label for="referring">Referring dental office (optional)</label>
+    <input type="text" id="referring" />
+
+    <label for="notes">Notes (optional)</label>
+    <textarea id="notes" rows="4"></textarea>
+  </form>
+
+  <div class="actions no-print">
+    <h2>Email or text this to Francisco</h2>
+    <p><strong>Francisco Maddox</strong></p>
+    <p>Email: <strong>edwardmaddx88@gmail.com</strong></p>
+    <p style="font-size:0.85rem;margin-top:0.75rem;">
+      Your device does not send automatically — use the buttons below, then attach a screenshot or use Print → Save as PDF if you prefer.
+    </p>
+    <div class="btn-row">
+      <button type="button" id="btnEmail">Open email draft</button>
+      <button type="button" id="btnCopy" class="secondary">Copy summary</button>
+      <button type="button" id="btnPrint" class="secondary">Print / Save as PDF</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var ROUTING_EMAIL = 'edwardmaddx88@gmail.com'
+      var ROUTING_NAME = 'Francisco Maddox'
+
+      function val(id) {
+        var el = document.getElementById(id)
+        return el ? String(el.value || '').trim() : ''
+      }
+
+      function sourceLine() {
+        var loc = val('sourceLocation')
+        if (!loc) return 'Source location: —'
+        if (loc === 'Other') {
+          var extra = val('sourceOther')
+          return 'Source location: Other' + (extra ? ' — ' + extra : '')
+        }
+        return 'Source location: ' + loc
+      }
+
+      function summary() {
+        var lines = [
+          'Dental intake (offline paper form)',
+          '',
+          'QR / ref: ' + (val('qrRef') || '—'),
+          sourceLine(),
+          'Name: ' + val('firstName') + ' ' + val('lastName'),
+          'Email: ' + (val('email') || '—'),
+          'Phone: ' + (val('phone') || '—'),
+          'Address / ZIP: ' + (val('address') || '—'),
+          'Language: ' + val('language'),
+          'I am a: ' + val('interest'),
+          'Best time: ' + (val('appt') || '—'),
+          'Referring office: ' + (val('referring') || '—'),
+          'Notes: ' + (val('notes') || '—'),
+          '',
+          '— Please send this to ' + ROUTING_NAME + ' at ' + ROUTING_EMAIL,
+        ]
+        return lines.join('\n')
+      }
+
+      function validateContact() {
+        if (!val('sourceLocation')) {
+          alert('Please select a source location (Airport, Dental Office, Event, etc.).')
+          return false
+        }
+        if (val('sourceLocation') === 'Other' && !val('sourceOther')) {
+          alert('Please briefly describe the source (Other).')
+          return false
+        }
+        if (!val('firstName') || !val('lastName')) {
+          alert('Please enter first and last name.')
+          return false
+        }
+        if (!val('email') && !val('phone')) {
+          alert('Please enter at least an email or a phone number.')
+          return false
+        }
+        return true
+      }
+
+      var sel = document.getElementById('sourceLocation')
+      var otherBlock = document.getElementById('sourceOtherBlock')
+      function syncSourceOther() {
+        if (!sel || !otherBlock) return
+        otherBlock.style.display = sel.value === 'Other' ? 'block' : 'none'
+      }
+      sel.addEventListener('change', syncSourceOther)
+      syncSourceOther()
+
+      document.getElementById('btnEmail').addEventListener('click', function () {
+        if (!validateContact()) return
+        var loc = val('sourceLocation')
+        var locInSubj = loc || '—'
+        if (loc === 'Other' && val('sourceOther')) {
+          locInSubj = 'Other (' + val('sourceOther') + ')'
+        }
+        var subj = encodeURIComponent(
+          'Intake — ' + locInSubj + ' — ' + val('firstName') + ' ' + val('lastName')
+        )
+        var body = encodeURIComponent(summary().slice(0, 1900))
+        window.location.href = 'mailto:' + ROUTING_EMAIL + '?subject=' + subj + '&body=' + body
+      })
+
+      document.getElementById('btnCopy').addEventListener('click', function () {
+        if (!validateContact()) return
+        var t = summary()
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(t).then(function () {
+            alert('Summary copied. Paste into email or a text message to ' + ROUTING_NAME + '.')
+          }).catch(function () {
+            prompt('Copy this text:', t)
+          })
+        } else {
+          prompt('Copy this text:', t)
+        }
+      })
+
+      document.getElementById('btnPrint').addEventListener('click', function () {
+        if (!validateContact()) return
+        window.print()
+      })
+    })()
+  </script>
+</body>
+</html>

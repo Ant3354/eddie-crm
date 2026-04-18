@@ -18,12 +18,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} min-h-screen antialiased`} suppressHydrationWarning>
         <ThemeProvider>
-          <>
+          <div className="flex min-h-screen flex-col">
             <Navigation />
-            {children}
-          </>
+            <main className="flex-1">{children}</main>
+          </div>
         </ThemeProvider>
       </body>
     </html>

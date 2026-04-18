@@ -15,6 +15,7 @@ interface TestResults {
   overallStatus: 'PASS' | 'FAIL' | 'WARN'
   tests: { [key: string]: TestResult }
   errors: string[]
+  summary?: { total: number; passed: number; failed: number }
 }
 
 export async function GET() {
@@ -271,7 +272,6 @@ export async function GET() {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'
       const portalRes = await fetch(`${baseUrl}/api/portal-email`, {
         method: 'POST',
-        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contactId: testContactId! }),
       })
@@ -303,7 +303,6 @@ export async function GET() {
       })
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'
       const policyRes = await fetch(`${baseUrl}/api/policies`, {
-        method: 'GET',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -342,6 +341,12 @@ export async function GET() {
   }
 
   results.overallStatus = results.errors.length === 0 ? 'PASS' : 'FAIL'
+  const testValues = Object.values(results.tests)
+  results.summary = {
+    total: testValues.length,
+    passed: testValues.filter((t) => t.status === 'PASS').length,
+    failed: testValues.filter((t) => t.status === 'FAIL').length,
+  }
   return NextResponse.json(results)
 }
 

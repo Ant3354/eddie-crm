@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
     
     let firstName = ''
     let lastName = ''
-    let email = ''
-    let phone = ''
+    let email: string | undefined = ''
+    let phone: string | undefined = ''
     let address = ''
     let language = 'English'
     let interestType = 'PROSPECT'

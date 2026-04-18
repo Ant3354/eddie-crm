@@ -10,6 +10,7 @@ import {
   Mail, MessageSquare, CheckSquare2, TrendingUp, Activity, 
   Sparkles, Tag, Globe, Clock, Save, X
 } from 'lucide-react'
+import { asArray } from '@/lib/as-array'
 
 interface Campaign {
   id: string
@@ -64,13 +65,19 @@ export default function CampaignDetailPage() {
       const res = await fetch(`/api/campaigns/${params.id}`)
       if (res.ok) {
         const data = await res.json()
-        setCampaign(data)
+        const normalized: Campaign = {
+          ...data,
+          steps: asArray(data?.steps),
+          contacts: asArray(data?.contacts),
+          _count: data?._count ?? { contacts: 0 },
+        }
+        setCampaign(normalized)
         setFormData({
-          name: data.name,
-          description: data.description || '',
-          category: data.category,
-          type: data.type,
-          isActive: data.isActive,
+          name: normalized.name,
+          description: normalized.description || '',
+          category: normalized.category,
+          type: normalized.type,
+          isActive: normalized.isActive,
         })
       } else {
         console.error('Failed to load campaign')

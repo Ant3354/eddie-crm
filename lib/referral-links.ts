@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import crypto from 'crypto'
+import { getPublicAppOrigin } from './app-origin'
 
 export interface ReferralLinkData {
   contactId: string
@@ -32,13 +33,13 @@ export async function generateReferralLink(contactId: string): Promise<string> {
 
   if (existingTag) {
     const code = existingTag.name.replace('Referral Code: ', '')
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = getPublicAppOrigin()
     return `${baseUrl}/referral/${code}`
   }
 
   // Generate unique referral code
   const referralCode = crypto.randomBytes(8).toString('hex').toUpperCase()
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = getPublicAppOrigin()
   const referralUrl = `${baseUrl}/referral/${referralCode}`
 
   // Store referral code as tag
@@ -78,7 +79,7 @@ export async function getReferralLink(contactId: string): Promise<string | null>
   }
 
   const code = tag.name.replace('Referral Code: ', '')
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const baseUrl = getPublicAppOrigin()
   return `${baseUrl}/referral/${code}`
 }
 

@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendTestEmail } from '@/lib/email-test'
 import { getPortalRedirectEmailTemplate } from '@/lib/email'
+import { getPublicAppOrigin } from '@/lib/app-origin'
+
+/** Health / discovery — POST creates policies, PATCH updates (plan-change emails). */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    message: 'Policy API is running',
+    usage: 'POST to create a policy; PATCH to update (triggers portal email on plan change when configured)',
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,7 +92,7 @@ export async function PATCH(request: NextRequest) {
           riderBenefits: policy.riderBenefitsLink || undefined,
           supportPhone: process.env.SUPPORT_PHONE,
           supportChat: process.env.SUPPORT_CHAT_URL,
-          appointmentLink: `${process.env.NEXT_PUBLIC_APP_URL}/appointments?contact=${policy.contactId}`,
+          appointmentLink: `${getPublicAppOrigin()}/appointments?contact=${policy.contactId}`,
         }
 
         const emailContent = getPortalRedirectEmailTemplate(

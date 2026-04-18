@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Search, Filter, Download, Upload, Plus, Mail, Phone, AlertTriangle, Tag, Calendar, TrendingUp, Save as SaveIcon, Trash2 } from 'lucide-react'
+import { asArray } from '@/lib/as-array'
 
 interface Contact {
   id: string
@@ -51,14 +52,15 @@ export default function ContactsPage() {
       if (filter.search) params.set('search', filter.search)
 
       const res = await fetch(`/api/contacts?${params}`)
-      const data = await res.json()
+      const raw = await res.json()
+      const data = asArray<Contact>(raw)
       setContacts(data)
-      
+
       // Calculate stats
       setStats({
         total: data.length,
-        alerts: data.filter((c: Contact) => c.paymentIssueAlert).length,
-        enrolled: data.filter((c: Contact) => c.status === 'ENROLLED' || c.status === 'ACTIVE_CLIENT').length,
+        alerts: data.filter((c) => c.paymentIssueAlert).length,
+        enrolled: data.filter((c) => c.status === 'ENROLLED' || c.status === 'ACTIVE_CLIENT').length,
       })
     } catch (error) {
       console.error('Failed to load contacts:', error)

@@ -2,10 +2,27 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Webhook, Mail, MessageSquare, Play, Copy, CheckCircle2, ExternalLink, Code } from 'lucide-react'
-import { useState } from 'react'
+import { Settings, Webhook, Mail, MessageSquare, Play, Copy, CheckCircle2, ExternalLink, Code, WifiOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { readOfflineModeFromEnv, setOfflineModeOverride, useOfflineMode, OFFLINE_MODE_EVENT } from '@/lib/offline-mode'
 
 export default function IntegrationsPage() {
+  const offlineEffective = useOfflineMode()
+  const [envOfflineDefault, setEnvOfflineDefault] = useState(false)
+  const [overrideMode, setOverrideMode] = useState<'env' | 'on' | 'off'>('env')
+
+  useEffect(() => {
+    const read = () => {
+      setEnvOfflineDefault(readOfflineModeFromEnv())
+      if (typeof window === 'undefined') return
+      const o = localStorage.getItem('eddie-offline-mode-override')
+      setOverrideMode(o === '1' ? 'on' : o === '0' ? 'off' : 'env')
+    }
+    read()
+    window.addEventListener(OFFLINE_MODE_EVENT, read)
+    return () => window.removeEventListener(OFFLINE_MODE_EVENT, read)
+  }, [])
+
   const [copied, setCopied] = useState<string | null>(null)
 
   const copyToClipboard = (text: string, id: string) => {
@@ -40,6 +57,62 @@ export default function IntegrationsPage() {
             </div>
           </div>
         </div>
+
+        <Card className="mb-6 border-2 border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-gray-900/80 shadow-lg">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <WifiOff className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+              Offline / LAN-only workflow
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+            <p>
+              When this is <strong>on</strong>, the CRM favors <strong>mailto</strong>, <strong>SMS links</strong>,{' '}
+              <strong>copy</strong>, and <strong>print</strong> instead of relying on server SMTP or Twilio. Use it when
+              the app runs only on your local network without outbound email.
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Environment default: <strong>{envOfflineDefault ? 'ON' : 'OFF'}</strong> (<code className="text-xs">NEXT_PUBLIC_OFFLINE_MODE=true</code>
+              ). Effective now: <strong>{offlineEffective ? 'ON' : 'OFF'}</strong>.
+            </p>
+            <fieldset className="space-y-2 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <legend className="text-xs font-semibold px-1 text-gray-900 dark:text-white">Per-browser override</legend>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="offlineOverride"
+                  checked={overrideMode === 'env'}
+                  onChange={() => {
+                    setOfflineModeOverride(null)
+                  }}
+                />
+                <span>Follow environment (.env)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="offlineOverride"
+                  checked={overrideMode === 'on'}
+                  onChange={() => {
+                    setOfflineModeOverride(true)
+                  }}
+                />
+                <span>Always use offline UI (mailto / print / hide server send)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="offlineOverride"
+                  checked={overrideMode === 'off'}
+                  onChange={() => {
+                    setOfflineModeOverride(false)
+                  }}
+                />
+                <span>Always use online UI (show server email/SMS actions)</span>
+              </label>
+            </fieldset>
+          </CardContent>
+        </Card>
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* JotForm Integration */}
@@ -98,34 +171,47 @@ export default function IntegrationsPage() {
               </p>
             </CardHeader>
             <CardContent className="relative z-10">
-              <div className="space-y-3">
-                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Environment Variables (.env)</p>
-                  <div className="space-y-1 text-xs font-mono text-gray-600 dark:text-gray-400">
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      SMTP_HOST
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      SMTP_PORT
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      SMTP_USER
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      SMTP_PASS
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                  <p className="text-xs text-green-800 dark:text-green-300">
-                    <strong>Note:</strong> Without SMTP credentials, emails will be logged to the database in test mode.
+              {offlineEffective ? (
+                <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                  <p>
+                    <strong>Offline UI:</strong> server SMTP send is de-emphasized. Use contact pages to{' '}
+                    <strong>copy</strong> text, <strong>mailto</strong> drafts, or <strong>print</strong> instead.
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    SMTP variables remain in <code className="text-xs">.env</code> if you later deploy online; turn off
+                    offline mode above to surface the full server integration panel.
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Environment Variables (.env)</p>
+                    <div className="space-y-1 text-xs font-mono text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        SMTP_HOST
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        SMTP_PORT
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        SMTP_USER
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        SMTP_PASS
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg border border-green-200 dark:border-green-800">
+                    <p className="text-xs text-green-800 dark:text-green-300">
+                      <strong>Note:</strong> Without SMTP credentials, emails will be logged to the database in test mode.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -145,30 +231,42 @@ export default function IntegrationsPage() {
               </p>
             </CardHeader>
             <CardContent className="relative z-10">
-              <div className="space-y-3">
-                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Environment Variables (.env)</p>
-                  <div className="space-y-1 text-xs font-mono text-gray-600 dark:text-gray-400">
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      TWILIO_ACCOUNT_SID
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      TWILIO_AUTH_TOKEN
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Code className="w-3 h-3" />
-                      TWILIO_PHONE_NUMBER
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <p className="text-xs text-purple-800 dark:text-purple-300">
-                    <strong>Note:</strong> Without Twilio credentials, SMS will be logged to the database in test mode.
+              {offlineEffective ? (
+                <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+                  <p>
+                    <strong>Offline UI:</strong> server SMS send is de-emphasized. Use <strong>sms:</strong> links from the
+                    contact page (mobile) or copy the message text.
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Twilio variables stay in <code className="text-xs">.env</code> for a future online deployment.
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Environment Variables (.env)</p>
+                    <div className="space-y-1 text-xs font-mono text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        TWILIO_ACCOUNT_SID
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        TWILIO_AUTH_TOKEN
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Code className="w-3 h-3" />
+                        TWILIO_PHONE_NUMBER
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
+                    <p className="text-xs text-purple-800 dark:text-purple-300">
+                      <strong>Note:</strong> Without Twilio credentials, SMS will be logged to the database in test mode.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
