@@ -1,5 +1,17 @@
-# Ignore files that shouldn't be deployed
+# Paths excluded from `vercel` CLI uploads. Add local build/output dirs here or `vercel --prod`
+# may upload gigabytes and fail with Vercel's 100 MB upload limit.
+
 node_modules
+.next
+out
+release
+dist
+.vercel/output
+coverage
+playwright-report
+test-results
+electron/**/node_modules
+
 .env
 .env.local
 .env*.local
@@ -7,6 +19,7 @@ node_modules
 .DS_Store
 prisma/dev.db
 prisma/dev.db-journal
+prisma/.next
 public/qrcodes/*.png
 server-startup.log
 *.md
