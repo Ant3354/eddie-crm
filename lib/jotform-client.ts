@@ -30,7 +30,6 @@ async function jotformRequest<T>(path: string): Promise<T> {
   const res = await fetch(url, {
     headers: { APIKEY: key },
     cache: 'no-store',
-    next: { revalidate: 0 },
   })
   const body = (await res.json().catch(() => ({}))) as JotformEnvelope<T> & {
     error?: string
