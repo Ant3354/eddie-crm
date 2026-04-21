@@ -11,9 +11,7 @@
   - Role: ADMIN
 
 ### Connection String
-```
-postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-```
+Store `DATABASE_URL` in Vercel and local `.env` / `.env.local` only — do not commit credentials to git.
 
 ---
 
@@ -35,7 +33,7 @@ Go to Settings → Environment Variables and add:
 **Required (add to BOTH Production and Preview):**
 
 ```
-DATABASE_URL = postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_URL = <your Neon Postgres URL>
 ```
 
 ```

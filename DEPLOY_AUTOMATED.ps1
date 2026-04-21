@@ -4,12 +4,15 @@
 Write-Host "=== EDDIE CRM - Full Automated Deployment ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Database connection
-$env:DATABASE_URL = "postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# Database connection — set before running, or use: vercel env pull .env.local
+if (-not $env:DATABASE_URL) {
+  Write-Error "Set DATABASE_URL to your Neon Postgres URL, then re-run."
+  exit 1
+}
 
-# Secrets
-$jwtSecret = "0jQEi74YZghFGOqHRUbXVKBotpADWfCs"
-$cronSecret = "9c184a08-daba-43cb-9710-3ab9249ec9cb"
+# Secrets — generate or read from Vercel; do not hardcode
+$jwtSecret = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
+$cronSecret = (New-Guid).ToString()
 
 Write-Host "Step 1: Verifying setup..." -ForegroundColor Yellow
 Write-Host "✅ Database: Connected" -ForegroundColor Green

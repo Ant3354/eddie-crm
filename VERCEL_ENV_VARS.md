@@ -7,7 +7,7 @@ Copy these to your Vercel project → Settings → Environment Variables
 Add these to **BOTH** Production and Preview:
 
 ```
-DATABASE_URL = postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_URL = <your Neon Postgres URL from neon.tech — never commit>
 ```
 
 ```

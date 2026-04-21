@@ -6,7 +6,7 @@ export type QrSheetParams = {
   qrId: string
 }
 
-/** Opens a print-friendly tab (same Wi‑Fi / LAN instructions). */
+/** Opens a print-friendly tab for event handouts. */
 export function openPrintableQrSheet(p: QrSheetParams): void {
   const esc = (s: string) =>
     s
@@ -14,6 +14,10 @@ export function openPrintableQrSheet(p: QrSheetParams): void {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
+
+  const imgSrc = p.qrImageAbsoluteUrl.startsWith('data:')
+    ? p.qrImageAbsoluteUrl
+    : esc(p.qrImageAbsoluteUrl)
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -36,16 +40,16 @@ export function openPrintableQrSheet(p: QrSheetParams): void {
 </head>
 <body>
   <h1>${esc(p.title)}</h1>
-  <p class="muted">Source: <strong>${esc(p.source)}</strong> · For phones, use the same Wi‑Fi as this computer (or connect to this PC’s hotspot). Set <code>NEXT_PUBLIC_APP_URL</code> to this machine’s LAN IP.</p>
+  <p class="muted">Source: <strong>${esc(p.source)}</strong> · Scanning opens your online form (requires internet on the phone).</p>
   <div class="box">
-    <img src="${esc(p.qrImageAbsoluteUrl)}" alt="QR Code" width="260" height="260" />
+    <img src="${imgSrc}" alt="QR Code" width="260" height="260" />
   </div>
   <p><strong>Scan opens</strong></p>
   <code>${esc(p.intakeUrl)}</code>
   <p style="margin-top:16px;font-size:13px;"><strong>QR record ID</strong> ${esc(p.qrId)}</p>
   <ul>
     <li>Print this page or save as PDF for events.</li>
-    <li>If the phone cannot open the link, use printed intake forms and enter data in the CRM later.</li>
+    <li>Submissions flow into the CRM when your JotForm webhook is configured for production.</li>
   </ul>
   <p class="noprint" style="margin-top:24px;"><button type="button" onclick="window.print()" style="padding:10px 18px;font-size:15px;cursor:pointer;">Print</button></p>
   <script>window.focus();</script>

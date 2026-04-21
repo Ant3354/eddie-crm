@@ -47,6 +47,7 @@ next-env.d.ts
 server-startup.log
 build-fixes.log
 agent-implementation-log.txt
+jotform-sync-implementation.log
 smoke-test-report.json
 deep-api-test-report.json
 

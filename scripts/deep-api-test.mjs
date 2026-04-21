@@ -214,7 +214,10 @@ async function main() {
   }
 
   const { res: qrRes, json: qr } = await j('POST', BASE + '/api/qrcodes/generate', {
-    body: { source: tag, useLocalIntake: true },
+    body: {
+      source: tag,
+      jotFormUrl: 'https://form.jotform.com/253266939811163',
+    },
   })
   log('POST /api/qrcodes/generate', qrRes.ok, { status: qrRes.status })
   const qrCodeId = qr?.qrCodeId

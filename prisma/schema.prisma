@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  // Must match DATABASE_URL (local dev uses prisma/dev.db — see .env)
-  provider = "sqlite"
+  // Production: Neon / Postgres on Vercel. Local: set DATABASE_URL in .env (see DO_THIS_NOW / README).
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -49,10 +49,25 @@ model Contact {
   auditLogs         AuditLog[]
   referralLink      ReferralLink?
   referralConversions ReferralConversion[]
-  
+  jotformSyncedSubmissions JotformSyncedSubmission[]
+
   @@index([category])
   @@index([status])
   @@index([paymentIssueAlert])
+}
+
+// Dedupes JotForm API poll + webhook so the same submission is not imported twice.
+model JotformSyncedSubmission {
+  id             String   @id @default(cuid())
+  formId         String
+  submissionId   String   @unique
+  contactId      String
+  contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  // webhook | api_poll
+  source         String   @default("api_poll")
+  createdAt      DateTime @default(now())
+
+  @@index([formId])
 }
 
 

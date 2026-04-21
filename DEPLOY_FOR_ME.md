@@ -67,7 +67,7 @@ If you prefer using the web interface:
 Click "Environment Variables" and add these (for BOTH Production and Preview):
 
 ```
-DATABASE_URL = postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+DATABASE_URL = <paste from Neon dashboard — do not commit>
 ```
 
 ```
@@ -76,11 +76,11 @@ NEXT_PUBLIC_APP_URL = https://your-app.vercel.app
 *(Update after first deploy)*
 
 ```
-JWT_SECRET = 0jQEi74YZghFGOqHRUbXVKBotpADWfCs
+JWT_SECRET = <generate a long random string>
 ```
 
 ```
-CRON_SECRET = 9c184a08-daba-43cb-9710-3ab9249ec9cb
+CRON_SECRET = <generate a UUID or random string>
 ```
 
 ### 4. Deploy
@@ -104,9 +104,7 @@ CRON_SECRET = 9c184a08-daba-43cb-9710-3ab9249ec9cb
 **Database:**
 - Already connected and ready!
 
-**Secrets Generated:**
-- JWT_SECRET: `0jQEi74YZghFGOqHRUbXVKBotpADWfCs`
-- CRON_SECRET: `9c184a08-daba-43cb-9710-3ab9249ec9cb`
+**Secrets:** Store `JWT_SECRET` and `CRON_SECRET` only in Vercel (or a password manager), not in git.
 
 ---
 

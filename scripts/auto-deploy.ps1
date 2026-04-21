@@ -2,7 +2,8 @@
 # This script handles the entire deployment process
 
 param(
-    [string]$DatabaseUrl = "postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+    [Parameter(Mandatory = $true)]
+    [string]$DatabaseUrl
 )
 
 Write-Host "=== EDDIE CRM - Automated Deployment ===" -ForegroundColor Cyan

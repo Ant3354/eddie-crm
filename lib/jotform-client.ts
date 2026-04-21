@@ -104,12 +104,31 @@ function normalizeSubmissionList(raw: unknown): JotformSubmissionPreview[] {
   return []
 }
 
+/**
+ * Paginated form submissions (inbox). JotForm caps limit per request (typically 100–1000).
+ * @param orderby e.g. `created_at` — pass-through to API
+ */
+export async function fetchJotformSubmissionsPage(
+  formId: string,
+  opts?: { offset?: number; limit?: number; orderby?: string }
+): Promise<JotformSubmissionPreview[]> {
+  const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 100)
+  const offset = Math.max(opts?.offset ?? 0, 0)
+  let path = `/form/${encodeURIComponent(formId)}/submissions?limit=${limit}&offset=${offset}`
+  if (opts?.orderby?.trim()) {
+    path += `&orderby=${encodeURIComponent(opts.orderby.trim())}`
+  }
+  const raw = await jotformRequest<unknown>(path)
+  return normalizeSubmissionList(raw)
+}
+
 export async function fetchJotformSubmissions(
   formId: string,
   limit = 3
 ): Promise<{ submissions: JotformSubmissionPreview[]; rawCount?: number }> {
-  const raw = await jotformRequest<unknown>(
-    `/form/${encodeURIComponent(formId)}/submissions?limit=${limit}`
-  )
-  return { submissions: normalizeSubmissionList(raw) }
+  const submissions = await fetchJotformSubmissionsPage(formId, {
+    limit,
+    offset: 0,
+  })
+  return { submissions }
 }

@@ -18,19 +18,19 @@ Add these **one by one**:
 
 **Variable 1:**
 - Key: `DATABASE_URL`
-- Value: `postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+- Value: Your Postgres connection string (e.g. from Neon) — **keep it out of git.**
 - Environment: Select **Production** AND **Preview**
 - Click "Save"
 
 **Variable 2:**
 - Key: `JWT_SECRET`
-- Value: `0jQEi74YZghFGOqHRUbXVKBotpADWfCs`
+- Value: A long random secret (generate locally; do not reuse samples from old docs)
 - Environment: Select **Production** AND **Preview**
 - Click "Save"
 
 **Variable 3:**
 - Key: `CRON_SECRET`
-- Value: `9c184a08-daba-43cb-9710-3ab9249ec9cb`
+- Value: A random UUID or string for securing cron HTTP endpoints
 - Environment: Select **Production** AND **Preview**
 - Click "Save"
 

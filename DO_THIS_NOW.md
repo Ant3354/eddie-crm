@@ -23,22 +23,22 @@ Click "Environment Variables" and add:
 
 **Variable 1:**
 - Name: `DATABASE_URL`
-- Value: `postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
-- Select: Production AND Preview
+- Value: Your Neon (or other Postgres) connection string from the provider dashboard — **never commit this to git.**
+- Select: Production AND Preview (and Development if you use `vercel env pull`)
 
 **Variable 2:**
 - Name: `JWT_SECRET`
-- Value: `0jQEi74YZghFGOqHRUbXVKBotpADWfCs`
+- Value: A long random string (generate locally, e.g. `openssl rand -hex 32`)
 - Select: Production AND Preview
 
 **Variable 3:**
 - Name: `CRON_SECRET`
-- Value: `9c184a08-daba-43cb-9710-3ab9249ec9cb`
+- Value: A UUID or random string for `Authorization: Bearer …` on cron routes
 - Select: Production AND Preview
 
 **Variable 4:**
 - Name: `NEXT_PUBLIC_APP_URL`
-- Value: `https://your-app.vercel.app` (you'll update this after deploy)
+- Value: Your live site URL, e.g. `https://eddie-crm-khaki.vercel.app`
 - Select: Production AND Preview
 
 ### 4. Deploy!
@@ -65,14 +65,18 @@ Click "Environment Variables" and add:
 
 ## ⚠️ Important: Cron Job Configuration
 
-The cron job is set to run **once per day at 9 AM UTC** (Vercel Hobby plan limit).
+Vercel **Hobby** only allows **one run per day** per scheduled cron. Campaigns stay on the daily schedule in `vercel.json`.
 
-If you need more frequent campaign processing:
-- **Option 1**: Upgrade to Vercel Pro
-- **Option 2**: Use a free external cron service (see `VERCEL_CRON_FIX.md`)
-- **Option 3**: Manually trigger via `/api/campaigns/process`
+**JotForm inbox sync every 30 minutes:** this repo includes **`.github/workflows/jotform-sync-cron.yml`**. Add GitHub Actions secrets `EDDIE_CRM_BASE_URL` (your live site URL, no trailing slash) and `CRON_SECRET` (same value as `CRON_SECRET` on Vercel). The workflow POSTs to `/api/cron/jotform-sync` with `Authorization: Bearer …`.
 
-See `VERCEL_CRON_FIX.md` for details.
+## 🔐 Rotate Neon database password (do in Neon console)
+
+1. Open [Neon Console](https://console.neon.tech) → your project → **Roles** (or **Reset password** for the DB role).
+2. Generate a new password and copy the **new** connection string (`DATABASE_URL`).
+3. Update **Vercel** → Project → Environment Variables → `DATABASE_URL` (Production, Preview, Development) → **Save** → **Redeploy**.
+4. Update local **`.env`** and **`.env.local`** (or run `vercel env pull .env.local` after Vercel is updated), then run `npx prisma db push` if the schema changed.
+
+For more frequent **campaign** processing only, see `VERCEL_CRON_FIX.md`.
 
 ---
 

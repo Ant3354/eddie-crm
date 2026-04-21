@@ -38,17 +38,17 @@ STEP 3: Add Environment Variables
 Click "Environment Variables" and add these:
 
 DATABASE_URL
-postgresql://neondb_owner:npg_K8yGqg0PrOQw@ep-proud-feather-ah5r6q3c-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+(paste from Neon — never commit to git)
 
 NEXT_PUBLIC_APP_URL
 https://your-app.vercel.app
 (Update after first deploy)
 
 JWT_SECRET
-0jQEi74YZghFGOqHRUbXVKBotpADWfCs
+(generate a long random string)
 
 CRON_SECRET
-9c184a08-daba-43cb-9710-3ab9249ec9cb
+(generate a UUID or random string)
 
 IMPORTANT: Select BOTH "Production" and "Preview" for each!
 

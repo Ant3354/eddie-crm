@@ -179,7 +179,10 @@ test.describe('Full UI deep pass', () => {
   test('QR page: select source + Generate QR Code', async ({ page, request }) => {
     const gen = await request.post('/api/qrcodes/generate', {
       headers: { 'Content-Type': 'application/json' },
-      data: JSON.stringify({ source: 'Airport', useLocalIntake: true }),
+      data: JSON.stringify({
+        source: 'Airport',
+        jotFormUrl: 'https://form.jotform.com/253266939811163',
+      }),
     })
     expect(gen.ok()).toBeTruthy()
     const { qrCodeId } = (await gen.json()) as { qrCodeId: string }
@@ -197,7 +200,10 @@ test.describe('Full UI deep pass', () => {
   test('intake form submit (with qr from API)', async ({ page, request }) => {
     const gen = await request.post('/api/qrcodes/generate', {
       headers: { 'Content-Type': 'application/json' },
-      data: JSON.stringify({ source: 'e2e-playwright', useLocalIntake: true }),
+      data: JSON.stringify({
+        source: 'e2e-playwright',
+        jotFormUrl: 'https://form.jotform.com/253266939811163',
+      }),
     })
     expect(gen.ok()).toBeTruthy()
     const body = await gen.json()
