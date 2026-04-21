@@ -35,6 +35,7 @@ interface Contact {
   preferredContactTime?: string | null
   leadNotes?: string | null
   jotformIntakeSummary?: string | null
+  qrSourceLabel?: string | null
   tags: Array<{ name: string }>
   policies: Array<any>
   tasks: Array<any>
@@ -336,8 +337,14 @@ export default function ContactDetailPage() {
               </div>
               <div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent mb-2">
-                  {display.firstName} {display.lastName}
+                  {[display.firstName, display.lastName].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed contact'}
                 </h1>
+                {contact.qrSourceLabel ? (
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-2 mb-2">
+                    <MapPin className="w-4 h-4 shrink-0" />
+                    QR scan / office location: {contact.qrSourceLabel}
+                  </p>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getCategoryColor(contact.category)}`}>
                     {contact.category.replace(/_/g, ' ')}
@@ -621,16 +628,18 @@ export default function ContactDetailPage() {
           {(contact.jotformIntakeSummary ||
             contact.leadNotes ||
             contact.gender ||
-            contact.preferredContactTime) && (
+            contact.preferredContactTime ||
+            contact.qrSourceLabel) && (
             <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-indigo-200/50 dark:border-indigo-800/50 shadow-xl">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
               <CardHeader className="relative z-10">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  Intake &amp; JotForm responses
+                  Intake &amp; form responses
                 </CardTitle>
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-normal mt-1">
-                  Pulled from the latest form submission (dental survey, best time to reach, notes, etc.).
+                  Every question we could read from JotForm or the local QR intake is listed below (labeled). QR-linked
+                  leads also show the CRM location label for that code.
                 </p>
               </CardHeader>
               <CardContent className="relative z-10 space-y-3 text-sm">

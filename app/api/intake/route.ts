@@ -5,6 +5,7 @@ import { trackQRScan } from '@/lib/qrcode'
 import { logAudit } from '@/lib/audit'
 import { mergeIntakeDuplicates } from '@/lib/contact-merge'
 import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
+import { inferNameFromFreeText } from '@/lib/intake-name-fallback'
 
 function mapInterestToCategory(interestType: string): string {
   const t = (interestType || '').trim()
@@ -46,9 +47,18 @@ export async function POST(request: NextRequest) {
 
     let fn = String(firstName || '').trim()
     let ln = String(lastName || '').trim()
+    const noteStr = notes ? String(notes).trim() : ''
+    if (!fn && !ln) {
+      const guessed = inferNameFromFreeText(noteStr)
+      fn = guessed.firstName.trim()
+      ln = guessed.lastName.trim()
+    }
     if (!fn && !ln) {
       fn = 'Unknown'
       ln = 'Contact'
+    }
+    if (fn && !ln) {
+      ln = ''
     }
 
     const em = email ? String(email).trim() : ''
@@ -64,7 +74,6 @@ export async function POST(request: NextRequest) {
     const language = languagePreference ? String(languagePreference).trim() : 'English'
     const interest = interestType ? String(interestType).trim() : 'Prospect'
     const appt = appointmentTime ? String(appointmentTime).trim() : ''
-    const noteStr = notes ? String(notes).trim() : ''
 
     const status = appt ? 'SCHEDULED' : 'LEAD'
     const category = mapInterestToCategory(interest)
@@ -83,31 +92,53 @@ export async function POST(request: NextRequest) {
     })
     const isNewContact = !contact
 
+    const stamp = `--- Local QR intake ${new Date().toISOString()} ---`
+    const intakeLines = [
+      `QR scan location: ${qr.source}`,
+      `Referral / source: ${source}`,
+      `Interest: ${interest}`,
+      `Language: ${language}`,
+      appt ? `Best time to reach / appointment: ${appt}` : null,
+      noteStr ? `Notes: ${noteStr}` : null,
+    ].filter(Boolean) as string[]
+    const intakeBlock = `${stamp}\n${intakeLines.join('\n')}`
+
     if (contact) {
+      const prevSummary = contact.jotformIntakeSummary
+      const nextSummary = prevSummary ? `${prevSummary}\n\n${intakeBlock}` : intakeBlock
+      const leadBits = [noteStr, interest, appt].filter(Boolean).join(' · ')
+      const mergedLead = [contact.leadNotes, leadBits].filter(Boolean).join('\n\n').trim().slice(0, 4000)
       contact = await prisma.contact.update({
         where: { id: contact.id },
         data: {
           firstName: fn || contact.firstName,
-          lastName: ln || contact.lastName,
+          lastName: ln,
           email: em || contact.email,
           mobilePhone: phone || contact.mobilePhone,
           address: addr || contact.address,
           languagePreference: language || contact.languagePreference,
           category: category as any,
           status: status as any,
+          qrSourceLabel: qr.source,
+          jotformIntakeSummary: nextSummary,
+          ...(mergedLead ? { leadNotes: mergedLead } : {}),
         },
       })
     } else {
+      const leadBits = [noteStr, interest, appt].filter(Boolean).join(' · ')
       contact = await prisma.contact.create({
         data: {
           firstName: fn,
-          lastName: ln,
+          lastName: ln || '',
           email: em || undefined,
           mobilePhone: phone || undefined,
           address: addr || undefined,
           languagePreference: language,
           category: category as any,
           status: status as any,
+          qrSourceLabel: qr.source,
+          jotformIntakeSummary: intakeBlock,
+          ...(leadBits ? { leadNotes: leadBits.slice(0, 4000) } : {}),
         },
       })
     }

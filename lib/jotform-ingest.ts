@@ -16,6 +16,7 @@ import { encrypt } from '@/lib/encryption'
 import type { Prisma } from '@prisma/client'
 import { mergeIntakeDuplicates } from '@/lib/contact-merge'
 import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
+import { inferNameFromAnswerMap, inferNameFromFreeText } from '@/lib/intake-name-fallback'
 
 export type IngestJotformOptions = {
   /** Webhook URL (for QR UTM query params). Omit for API-poll imports. */
@@ -410,6 +411,19 @@ export async function ingestJotformPayload(
     qrCodeId = qrFromRawPayload
   }
 
+  let qrSourceLabel: string | null = null
+  if (qrCodeId) {
+    try {
+      const qrRow = await prisma.qrCode.findUnique({
+        where: { id: qrCodeId },
+        select: { source: true },
+      })
+      if (qrRow?.source?.trim()) qrSourceLabel = qrRow.source.trim()
+    } catch {
+      /* ignore */
+    }
+  }
+
   let status = 'LEAD'
   if (appointmentTime) {
     status = 'SCHEDULED'
@@ -417,17 +431,44 @@ export async function ingestJotformPayload(
 
   const category = mapJotformInterestToCategory(interestType)
 
+  if (!(firstName || '').trim() && !(lastName || '').trim()) {
+    const fromMap = inferNameFromAnswerMap(answerMap)
+    if (fromMap.firstName || fromMap.lastName) {
+      firstName = fromMap.firstName
+      lastName = fromMap.lastName
+    }
+  }
+  if (!(firstName || '').trim() && !(lastName || '').trim()) {
+    const fromNotes = inferNameFromFreeText(
+      notes,
+      ...Object.values(answerMap).filter((v) => typeof v === 'string')
+    )
+    if (fromNotes.firstName || fromNotes.lastName) {
+      firstName = fromNotes.firstName
+      lastName = fromNotes.lastName
+    }
+  }
+
   if (!firstName && !lastName) {
     const fullName =
       body.formData?.name || body.name || body['Name'] || body['Full Name'] || ''
     if (fullName) {
       const nameParts = fullName.trim().split(' ')
       firstName = nameParts[0] || 'Unknown'
-      lastName = nameParts.slice(1).join(' ') || 'Contact'
+      lastName = nameParts.slice(1).join(' ') || ''
     } else {
       firstName = 'Unknown'
       lastName = 'Contact'
     }
+  }
+  if (firstName && !lastName) {
+    lastName = ''
+  }
+
+  let intakeSummaryFinal = intakeSummary
+  if (qrSourceLabel) {
+    const head = `QR location: ${qrSourceLabel}`
+    intakeSummaryFinal = intakeSummaryFinal ? `${head}\n\n${intakeSummaryFinal}` : head
   }
 
   if (!email && !phone) {
@@ -491,7 +532,8 @@ export async function ingestJotformPayload(
           ? { preferredContactTime }
           : {}),
         ...(leadNotesBlock ? { leadNotes: leadNotesBlock } : {}),
-        ...(intakeSummary ? { jotformIntakeSummary: intakeSummary } : {}),
+        ...(intakeSummaryFinal ? { jotformIntakeSummary: intakeSummaryFinal } : {}),
+        ...(qrSourceLabel ? { qrSourceLabel } : {}),
       },
     })
     if (verbose) console.log('Updated existing contact:', contact.id)
@@ -511,7 +553,8 @@ export async function ingestJotformPayload(
         ...(genderVal ? { gender: genderVal } : {}),
         ...(preferredContactTime ? { preferredContactTime } : {}),
         ...(leadNotesBlock ? { leadNotes: leadNotesBlock } : {}),
-        ...(intakeSummary ? { jotformIntakeSummary: intakeSummary } : {}),
+        ...(intakeSummaryFinal ? { jotformIntakeSummary: intakeSummaryFinal } : {}),
+        ...(qrSourceLabel ? { qrSourceLabel } : {}),
       },
     })
     if (verbose) console.log('Created new contact:', contact.id)

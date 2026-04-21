@@ -47,16 +47,33 @@ export function formatJotformPhoneObject(o: Record<string, unknown>): string {
 }
 
 export function parseJotformNameObject(o: Record<string, unknown>): { first: string; last: string } | null {
+  const fromPretty = String(
+    (o as Record<string, unknown>)['prettyFormat'] ?? (o as Record<string, unknown>)['prettyformat'] ?? ''
+  ).trim()
+  const fromText = String(o.text ?? '').trim()
+  const fromAnswer = String(o.answer ?? '').trim()
+  const joinedPretty = fromPretty || fromText || fromAnswer
+
   const hasNameShape =
     'first' in o ||
     'last' in o ||
     'firstName' in o ||
     'lastName' in o ||
-    ('middle' in o && ('first' in o || 'last' in o))
+    ('middle' in o && ('first' in o || 'last' in o)) ||
+    Boolean(joinedPretty)
+
   if (!hasNameShape) return null
+
   const first = String(o.first ?? o.firstName ?? '').trim()
   const last = String(o.last ?? o.lastName ?? '').trim()
   const middle = String(o.middle ?? '').trim()
+
+  if (!first && !last && !middle && joinedPretty) {
+    const parts = joinedPretty.split(/\s+/).filter(Boolean)
+    if (parts.length) return { first: parts[0], last: parts.slice(1).join(' ') }
+    return null
+  }
+
   if (!first && !last && !middle) return null
   const lastJoined = [middle, last].filter(Boolean).join(' ').trim()
   return { first, last: lastJoined || last }
@@ -118,6 +135,28 @@ export function extractIdentityHintsFromJotformAnswers(answers: unknown[]): Jotf
     const ans = row as Record<string, unknown>
     const label = String(ans.name || ans.text || ans.title || '').toLowerCase().trim()
     const raw = ans.answer ?? ans.value ?? ans.text
+
+    // Short / long text "Your name" style fields (plain string, not JSON object)
+    if (typeof raw === 'string' && raw.trim()) {
+      const s = raw.trim()
+      const nameishLabel =
+        (label.includes('name') &&
+          !label.includes('username') &&
+          !label.includes('company') &&
+          !label.includes('business') &&
+          !label.includes('referring') &&
+          !label.includes('office referring')) ||
+        label.includes('patient') ||
+        label.includes('who is')
+      if (nameishLabel && !label.includes('phone') && !label.includes('email') && !label.includes('address')) {
+        const parts = s.split(/\s+/).filter(Boolean)
+        if (parts.length && /^[a-zA-Z]/.test(parts[0])) {
+          if (!firstName) firstName = parts[0]
+          if (!lastName && parts.length > 1) lastName = parts.slice(1).join(' ')
+        }
+        continue
+      }
+    }
 
     if (!isPlainObject(raw) && typeof raw !== 'string') continue
 

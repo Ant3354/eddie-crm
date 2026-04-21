@@ -50,6 +50,8 @@ model Contact {
   leadNotes               String?  @db.Text
   /// Full labeled Q&A snapshot from the last JotForm ingest (dental survey, etc.).
   jotformIntakeSummary    String?  @db.Text
+  /// When linked via QR (local intake or JotForm with qr_code_id): CRM QR row label, e.g. "Airport".
+  qrSourceLabel           String?
   /// Optional CRM owner (user) assigned by pipeline rules or manually.
   ownerUserId             String?
   ownerUser               User?    @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -69,6 +71,7 @@ model Contact {
   @@index([status])
   @@index([paymentIssueAlert])
   @@index([ownerUserId])
+  @@index([qrSourceLabel])
 }
 
 // Dedupes JotForm API poll + webhook so the same submission is not imported twice.

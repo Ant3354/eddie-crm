@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Search, Filter, Download, Upload, Plus, Mail, Phone, AlertTriangle, Tag, Calendar, TrendingUp, Save as SaveIcon, Trash2 } from 'lucide-react'
+import { Users, Search, Filter, Download, Upload, Plus, Mail, Phone, AlertTriangle, Tag, Calendar, TrendingUp, Save as SaveIcon, Trash2, MapPin } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
 import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
 
@@ -22,6 +22,7 @@ interface Contact {
   enrolledDate?: string
   lastJotformSubmissionAt?: string
   updatedAt?: string
+  qrSourceLabel?: string | null
 }
 
 export default function ContactsPage() {
@@ -420,7 +421,7 @@ export default function ContactsPage() {
                         />
                         <Link href={`/contacts/${contact.id}`}>
                           <h3 className="text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                            {display.firstName} {display.lastName}
+                            {[display.firstName, display.lastName].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed contact'}
                           </h3>
                         </Link>
                         {contact.paymentIssueAlert && (
@@ -430,6 +431,12 @@ export default function ContactsPage() {
                           </span>
                         )}
                       </div>
+                      {contact.qrSourceLabel ? (
+                        <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 mb-2 font-medium">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          QR / location: {contact.qrSourceLabel}
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-4 mb-3">
                         {contact.email && (
                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">

@@ -92,6 +92,7 @@ export async function PATCH(
       leadNotes,
       jotformIntakeSummary,
       ownerUserId,
+      qrSourceLabel,
     } = body
 
     // Get old contact for audit
@@ -154,6 +155,7 @@ export async function PATCH(
     if (leadNotes !== undefined) updateData.leadNotes = leadNotes || null
     if (jotformIntakeSummary !== undefined) updateData.jotformIntakeSummary = jotformIntakeSummary || null
     if (ownerUserId !== undefined) updateData.ownerUserId = ownerUserId || null
+    if (qrSourceLabel !== undefined) updateData.qrSourceLabel = qrSourceLabel || null
 
     const contact = await prisma.contact.update({
       where: { id: params.id },
