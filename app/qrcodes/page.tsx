@@ -81,7 +81,7 @@ export default function QRCodesPage() {
   async function loadQRHistory(): Promise<QRCodeHistory[]> {
     setLoadingHistory(true)
     try {
-      const res = await fetch('/api/qrcodes')
+      const res = await fetch('/api/qrcodes', { cache: 'no-store' })
       if (!res.ok) {
         const errText = await res.text().catch(() => res.statusText)
         console.error('GET /api/qrcodes failed:', res.status, errText)
