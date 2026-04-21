@@ -333,12 +333,16 @@ export default function IntegrationsPage() {
                     </pre>
                   ) : null}
                   <p className="text-[11px] text-gray-500 dark:text-gray-500">
-                    Vercel Hobby only allows cron once per day. For automatic polling every 5 minutes, enable the GitHub
-                    Action in <code className="text-[10px]">.github/workflows/jotform-inbox-sync.yml</code> with secrets{' '}
+                    The repo already includes{' '}
+                    <code className="text-[10px]">.github/workflows/jotform-inbox-sync.yml</code> with schedule{' '}
+                    <code className="text-[10px]">*/5 * * * *</code> (about every 5 minutes; GitHub may add small delay).
+                    On GitHub: <strong>Settings → Secrets → Actions</strong> must define{' '}
                     <code className="text-[10px]">CRON_SECRET</code> and{' '}
-                    <code className="text-[10px]">VERCEL_PRODUCTION_URL</code>. It calls{' '}
-                    <code className="text-[10px]">GET /api/cron/jotform-sync</code> with the same Bearer token as this
-                    manual sync (when using <code className="text-[10px]">CRON_SECRET</code>).
+                    <code className="text-[10px]">VERCEL_PRODUCTION_URL</code> (same CRON secret as Vercel), and{' '}
+                    <strong>Actions must be enabled</strong> for the repository. It calls{' '}
+                    <code className="text-[10px]">GET /api/cron/jotform-sync</code> with{' '}
+                    <code className="text-[10px]">Authorization: Bearer …</code>. Confirm under{' '}
+                    <strong>Actions → JotForm inbox sync</strong> that recent runs are green.
                   </p>
                 </div>
               </div>

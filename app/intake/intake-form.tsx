@@ -49,6 +49,8 @@ export function IntakeForm() {
   const [appointmentTime, setAppointmentTime] = useState('')
   const [dentalOfficeReferring, setDentalOfficeReferring] = useState('')
   const [notes, setNotes] = useState('')
+  const [gender, setGender] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [submittedContactId, setSubmittedContactId] = useState<string | null>(null)
@@ -87,6 +89,8 @@ export function IntakeForm() {
           appointmentTime,
           dentalOfficeReferring,
           notes,
+          gender,
+          dateOfBirth,
         }),
       })
       const data = await res.json()
@@ -130,6 +134,8 @@ export function IntakeForm() {
       appointmentTime,
       dentalOfficeReferring,
       notes,
+      gender,
+      dateOfBirth,
       qrCodeId,
       contactId: submittedContactId || undefined,
     }
@@ -206,23 +212,34 @@ export function IntakeForm() {
               />
             </div>
           </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Email</label>
-            <input
-              type="email"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-700">Phone</label>
-            <input
-              type="tel"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={mobilePhone}
-              onChange={(e) => setMobilePhone(e.target.value)}
-            />
+          <p className="text-xs text-slate-600 bg-slate-100 dark:bg-slate-800/80 rounded-md px-3 py-2 border border-slate-200 dark:border-slate-700">
+            Provide <strong>at least one</strong> of email or mobile phone so we can save you in the CRM and show your
+            number on the contacts list.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Email</label>
+              <input
+                type="email"
+                autoComplete="email"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Mobile phone</label>
+              <input
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={mobilePhone}
+                onChange={(e) => setMobilePhone(e.target.value)}
+                placeholder="+1 (555) 123-4567"
+              />
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Address or ZIP</label>
@@ -230,7 +247,34 @@ export function IntakeForm() {
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
+              autoComplete="street-address"
             />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Gender (optional)</label>
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+              >
+                <option value="">—</option>
+                <option value="Female">Female</option>
+                <option value="Male">Male</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Date of birth (optional)</label>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                placeholder="MM/DD/YYYY or YYYY-MM-DD"
+                autoComplete="bday"
+              />
+            </div>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Language</label>

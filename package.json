@@ -29,6 +29,7 @@
     "test:deep-api": "node scripts/deep-api-test.mjs",
     "test:jotform": "node scripts/test-jotform-api.mjs",
     "test:jotform-inbox-sync": "tsx scripts/run-jotform-inbox-sync-once.ts",
+    "test:intake-qr": "tsx scripts/test-qr-intake-once.ts",
     "jotform:clear-sync-and-resync": "tsx scripts/clear-jotform-sync-and-resync.ts",
     "jotform:configure-dental": "node --env-file=.env.local scripts/configure-jotform-dental-form.mjs",
     "vercel:fix-cron-secret": "node scripts/set-vercel-cron-secret.mjs",

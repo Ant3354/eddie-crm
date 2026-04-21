@@ -12,6 +12,8 @@ export type IntakePdfFields = {
   appointmentTime: string
   dentalOfficeReferring: string
   notes: string
+  gender?: string
+  dateOfBirth?: string
   qrCodeId?: string
   contactId?: string
 }
@@ -44,8 +46,10 @@ export function downloadIntakePdf(fields: IntakePdfFields): void {
     ['First name', fields.firstName],
     ['Last name', fields.lastName],
     ['Email', fields.email || '—'],
-    ['Phone', fields.mobilePhone || '—'],
+    ['Mobile phone', fields.mobilePhone || '—'],
     ['Address / ZIP', fields.address || '—'],
+    ['Gender', fields.gender || '—'],
+    ['Date of birth', fields.dateOfBirth || '—'],
     ['Language', fields.languagePreference],
     ['I am a', fields.interestType],
     ['Best time to reach', fields.appointmentTime || '—'],
@@ -89,7 +93,9 @@ export function buildIntakeMailtoBody(fields: IntakePdfFields): string {
     ``,
     `Name: ${fields.firstName} ${fields.lastName}`,
     `Email: ${fields.email || '—'}`,
-    `Phone: ${fields.mobilePhone || '—'}`,
+    `Mobile phone: ${fields.mobilePhone || '—'}`,
+    `Gender: ${fields.gender || '—'}`,
+    `DOB: ${fields.dateOfBirth || '—'}`,
     `Interest: ${fields.interestType}`,
     `QR ID: ${fields.qrCodeId || '—'}`,
     `CRM contact ID: ${fields.contactId || '—'}`,

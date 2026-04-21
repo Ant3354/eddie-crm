@@ -6,6 +6,15 @@ import { logAudit } from '@/lib/audit'
 import { mergeIntakeDuplicates } from '@/lib/contact-merge'
 import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
 import { inferNameFromFreeText } from '@/lib/intake-name-fallback'
+import { encrypt } from '@/lib/encryption'
+
+function normalizeIntakeDob(raw: string | undefined): string | null {
+  const t = (raw || '').trim()
+  if (t.length < 6 || t.length > 32) return null
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10)
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(t)) return t
+  return null
+}
 
 function mapInterestToCategory(interestType: string): string {
   const t = (interestType || '').trim()
@@ -34,6 +43,8 @@ export async function POST(request: NextRequest) {
       appointmentTime,
       notes,
       dentalOfficeReferring,
+      gender,
+      dateOfBirth,
     } = body
 
     if (!qrCodeId || typeof qrCodeId !== 'string') {
@@ -74,6 +85,8 @@ export async function POST(request: NextRequest) {
     const language = languagePreference ? String(languagePreference).trim() : 'English'
     const interest = interestType ? String(interestType).trim() : 'Prospect'
     const appt = appointmentTime ? String(appointmentTime).trim() : ''
+    const genderVal = gender ? String(gender).trim().slice(0, 80) : ''
+    const dobRaw = normalizeIntakeDob(dateOfBirth ? String(dateOfBirth) : undefined)
 
     const status = appt ? 'SCHEDULED' : 'LEAD'
     const category = mapInterestToCategory(interest)
@@ -96,8 +109,13 @@ export async function POST(request: NextRequest) {
     const intakeLines = [
       `QR scan location: ${qr.source}`,
       `Referral / source: ${source}`,
+      `Email: ${em || '—'}`,
+      `Mobile phone: ${phone || '—'}`,
+      addr ? `Address: ${addr}` : null,
       `Interest: ${interest}`,
       `Language: ${language}`,
+      genderVal ? `Gender: ${genderVal}` : null,
+      dobRaw ? `Date of birth: ${dobRaw}` : null,
       appt ? `Best time to reach / appointment: ${appt}` : null,
       noteStr ? `Notes: ${noteStr}` : null,
     ].filter(Boolean) as string[]
@@ -121,6 +139,7 @@ export async function POST(request: NextRequest) {
           status: status as any,
           qrSourceLabel: qr.source,
           jotformIntakeSummary: nextSummary,
+          ...(genderVal ? { gender: genderVal } : {}),
           ...(mergedLead ? { leadNotes: mergedLead } : {}),
         },
       })
@@ -138,9 +157,22 @@ export async function POST(request: NextRequest) {
           status: status as any,
           qrSourceLabel: qr.source,
           jotformIntakeSummary: intakeBlock,
+          ...(genderVal ? { gender: genderVal } : {}),
           ...(leadBits ? { leadNotes: leadBits.slice(0, 4000) } : {}),
         },
       })
+    }
+
+    if (dobRaw) {
+      try {
+        await prisma.sensitiveData.upsert({
+          where: { contactId: contact.id },
+          create: { contactId: contact.id, dob: encrypt(dobRaw) },
+          update: { dob: encrypt(dobRaw) },
+        })
+      } catch (e) {
+        console.warn('Local intake: could not store DOB:', e)
+      }
     }
 
     try {
