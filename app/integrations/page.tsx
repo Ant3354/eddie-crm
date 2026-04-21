@@ -38,6 +38,8 @@ export default function IntegrationsPage() {
   const [copied, setCopied] = useState<string | null>(null)
   const [jotformApiLoading, setJotformApiLoading] = useState(false)
   const [jotformApiJson, setJotformApiJson] = useState<string | null>(null)
+  const [jotformSyncLoading, setJotformSyncLoading] = useState(false)
+  const [jotformSyncJson, setJotformSyncJson] = useState<string | null>(null)
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
@@ -217,6 +219,66 @@ export default function IntegrationsPage() {
                     {jotformApiJson}
                   </pre>
                 ) : null}
+                <div className="border-t border-blue-200/60 dark:border-blue-800/60 pt-4 space-y-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <strong>Inbox sync now:</strong> pulls new submissions from all discovered JotForm forms (same as
+                    scheduled sync). Paste your <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">CRON_SECRET</code>{' '}
+                    (Vercel → same value as the cron job uses).
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={jotformSyncLoading}
+                    onClick={async () => {
+                      const secret = typeof window !== 'undefined' ? window.prompt('CRON_SECRET')?.trim() : ''
+                      if (!secret) return
+                      setJotformSyncLoading(true)
+                      setJotformSyncJson(null)
+                      try {
+                        const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/cron/jotform-sync`
+                        const res = await fetch(url, {
+                          headers: { Authorization: `Bearer ${secret}` },
+                        })
+                        const data = await res.json().catch(() => ({ error: 'Invalid JSON' }))
+                        setJotformSyncJson(JSON.stringify({ ok: res.ok, status: res.status, ...data }, null, 2))
+                      } catch (e) {
+                        setJotformSyncJson(
+                          JSON.stringify(
+                            { ok: false, message: e instanceof Error ? e.message : 'Request failed' },
+                            null,
+                            2
+                          )
+                        )
+                      } finally {
+                        setJotformSyncLoading(false)
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    {jotformSyncLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Syncing…
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" />
+                        Run inbox sync now
+                      </>
+                    )}
+                  </Button>
+                  {jotformSyncJson ? (
+                    <pre className="max-h-48 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 p-3 text-[11px] leading-relaxed">
+                      {jotformSyncJson}
+                    </pre>
+                  ) : null}
+                  <p className="text-[11px] text-gray-500 dark:text-gray-500">
+                    Vercel Hobby only allows cron once per day. For near–real-time imports, add the GitHub Action in{' '}
+                    <code className="text-[10px]">.github/workflows/jotform-inbox-sync.yml</code> with repo secrets{' '}
+                    <code className="text-[10px]">CRON_SECRET</code> and <code className="text-[10px]">VERCEL_PRODUCTION_URL</code>.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

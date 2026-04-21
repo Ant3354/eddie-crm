@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncJotformInbox } from '@/lib/jotform-inbox-sync'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Scheduled JotForm inbox → CRM import (REST API poll).
  * Configure in vercel.json or hit manually with Authorization: Bearer CRON_SECRET.

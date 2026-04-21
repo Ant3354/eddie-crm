@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,31 +18,19 @@ interface Contact {
   paymentIssueAlert: boolean
   tags: Array<{ name: string }>
   enrolledDate?: string
+  lastJotformSubmissionAt?: string
+  updatedAt?: string
 }
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState({ category: '', status: '', paymentAlert: '', search: '' })
-  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null)
   const [stats, setStats] = useState({ total: 0, alerts: 0, enrolled: 0 })
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const selectedIds = Object.entries(selected).filter(([,v])=>v).map(([id])=>id)
 
-  useEffect(() => {
-    if (searchDebounce) {
-      clearTimeout(searchDebounce)
-    }
-    const timeout = setTimeout(() => {
-      loadContacts()
-    }, 300)
-    setSearchDebounce(timeout)
-    return () => {
-      if (searchDebounce) clearTimeout(searchDebounce)
-    }
-  }, [filter])
-
-  async function loadContacts() {
+  const loadContacts = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -51,7 +39,7 @@ export default function ContactsPage() {
       if (filter.paymentAlert === 'true') params.set('paymentAlert', 'true')
       if (filter.search) params.set('search', filter.search)
 
-      const res = await fetch(`/api/contacts?${params}`)
+      const res = await fetch(`/api/contacts?${params}`, { cache: 'no-store' })
       const raw = await res.json()
       const data = asArray<Contact>(raw)
       setContacts(data)
@@ -67,7 +55,21 @@ export default function ContactsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void loadContacts()
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [loadContacts])
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      void loadContacts()
+    }, 60000)
+    return () => clearInterval(t)
+  }, [loadContacts])
 
   async function bulkAddTag() {
     const name = prompt('Enter tag to add to selected contacts:')?.trim()
@@ -75,6 +77,23 @@ export default function ContactsPage() {
     await fetch('/api/contacts/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'addTag', contactIds: selectedIds, tag: name }) })
     await loadContacts()
     setSelected({})
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.length === 0) return
+    if (!confirm(`Permanently delete ${selectedIds.length} contact(s)? This cannot be undone.`)) return
+    const res = await fetch('/api/contacts/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', contactIds: selectedIds }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert((err as { error?: string }).error || 'Delete failed')
+      return
+    }
+    setSelected({})
+    await loadContacts()
   }
 
   function toggleAll(v: boolean) {
@@ -332,6 +351,14 @@ export default function ContactsPage() {
             <div className="text-sm text-blue-800 dark:text-blue-300">{selectedIds.length} selected</div>
             <div className="flex items-center gap-2">
               <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={bulkAddTag}>Add Tag</Button>
+              <Button
+                variant="outline"
+                className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+                onClick={() => void bulkDelete()}
+              >
+                <Trash2 className="w-4 h-4 mr-1 inline" />
+                Delete
+              </Button>
               <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={() => {
                 const csv = 'id\n' + selectedIds.join('\n')
                 const blob = new Blob([csv], { type: 'text/csv' })
@@ -409,6 +436,12 @@ export default function ContactsPage() {
                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <Calendar className="w-4 h-4" />
                             Enrolled: {new Date(contact.enrolledDate).toLocaleDateString()}
+                          </div>
+                        )}
+                        {contact.lastJotformSubmissionAt && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <Calendar className="w-4 h-4" />
+                            JotForm: {new Date(contact.lastJotformSubmissionAt).toLocaleString()}
                           </div>
                         )}
                       </div>

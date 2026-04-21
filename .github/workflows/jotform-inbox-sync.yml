@@ -1,0 +1,27 @@
+# Optional: poll JotForm every 5 minutes on any GitHub plan (complements Vercel Hobby,
+# which only allows cron once per day). Add repo secrets: CRON_SECRET, VERCEL_PRODUCTION_URL
+# (e.g. https://eddie-crm-khaki.vercel.app — no trailing slash).
+
+name: JotForm inbox sync
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CRM JotForm sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ secrets.VERCEL_PRODUCTION_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$BASE_URL" ]; then
+            echo "Skip: set CRON_SECRET and VERCEL_PRODUCTION_URL in repo secrets to enable."
+            exit 0
+          fi
+          curl -fsS -X GET "${BASE_URL}/api/cron/jotform-sync" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json"

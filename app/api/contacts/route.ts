@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
@@ -49,10 +51,22 @@ export async function GET(request: NextRequest) {
       orderBy: {
         updatedAt: 'desc',
       },
-      take: 100,
+      take: 500,
     })
 
-    return NextResponse.json(contacts)
+    contacts.sort((a, b) => {
+      const ja = a.lastJotformSubmissionAt?.getTime() ?? 0
+      const jb = b.lastJotformSubmissionAt?.getTime() ?? 0
+      if (jb !== ja) return jb - ja
+      return b.updatedAt.getTime() - a.updatedAt.getTime()
+    })
+
+    return NextResponse.json(contacts, {
+      headers: {
+        'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    })
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message },

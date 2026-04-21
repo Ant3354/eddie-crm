@@ -8,9 +8,6 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const qrCodes = await prisma.qrCode.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
       select: {
         id: true,
         source: true,
@@ -18,8 +15,21 @@ export async function GET() {
         qrCodeUrl: true,
         scanCount: true,
         submissionCount: true,
+        lastScanAt: true,
+        lastSubmissionAt: true,
         createdAt: true,
       },
+    })
+
+    qrCodes.sort((a, b) => {
+      const ta = a.lastScanAt?.getTime() ?? 0
+      const tb = b.lastScanAt?.getTime() ?? 0
+      if (tb !== ta) return tb - ta
+      const sa = a.lastSubmissionAt?.getTime() ?? 0
+      const sb = b.lastSubmissionAt?.getTime() ?? 0
+      if (sb !== sa) return sb - sa
+      if (b.scanCount !== a.scanCount) return b.scanCount - a.scanCount
+      return b.createdAt.getTime() - a.createdAt.getTime()
     })
 
     return NextResponse.json(qrCodes, {

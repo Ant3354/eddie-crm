@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -21,6 +23,16 @@ export async function POST(request: NextRequest) {
         )
       )
       return NextResponse.json({ success: true })
+    }
+
+    if (action === 'delete') {
+      await prisma.sensitiveData.deleteMany({
+        where: { contactId: { in: contactIds } },
+      })
+      const result = await prisma.contact.deleteMany({
+        where: { id: { in: contactIds } },
+      })
+      return NextResponse.json({ success: true, deleted: result.count })
     }
 
     return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })

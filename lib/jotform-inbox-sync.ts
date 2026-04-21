@@ -1,16 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getJotformApiKey, fetchJotformSubmissionsPage } from '@/lib/jotform-client'
 import { ingestJotformPayload } from '@/lib/jotform-ingest'
-
-/** Primary form + optional comma-separated extra form IDs. */
-export function getJotformSyncFormIds(): string[] {
-  const extra =
-    process.env.JOTFORM_SYNC_FORM_IDS?.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean) || []
-  const primary = process.env.JOTFORM_FORM_ID?.trim()
-  return Array.from(new Set([...(primary ? [primary] : []), ...extra]))
-}
+import { resolveJotformSyncFormIds } from '@/lib/jotform-resolve-form-ids'
 
 /** Map one JotForm REST submission row into the shape `ingestJotformPayload` expects. */
 export function submissionPayloadFromApiRow(sub: Record<string, unknown>): Record<string, unknown> {
@@ -29,11 +20,16 @@ export function submissionPayloadFromApiRow(sub: Record<string, unknown>): Recor
       })
     }
   }
+  const r = sub as Record<string, unknown>
   return {
     submissionID: String(sub.id ?? ''),
     formID: String(sub.form_id ?? ''),
     answers: answersArray,
     formData: sub.formData,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    rawRequest: typeof r.rawRequest === 'string' ? r.rawRequest : undefined,
+    requestURL: typeof r.requestURL === 'string' ? r.requestURL : undefined,
   }
 }
 
@@ -66,7 +62,7 @@ export async function syncJotformInbox(options?: {
     }
   }
 
-  const formIds = getJotformSyncFormIds()
+  const formIds = await resolveJotformSyncFormIds()
   if (formIds.length === 0) {
     return {
       ok: true,

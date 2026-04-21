@@ -85,6 +85,7 @@ export async function trackQRScan(qrCodeId: string) {
       scanCount: {
         increment: 1,
       },
+      lastScanAt: new Date(),
     },
   })
 }
@@ -96,6 +97,7 @@ export async function trackQRSubmission(qrCodeId: string) {
       where: { id: qrCodeId },
       data: {
         submissionCount: { increment: 1 },
+        lastSubmissionAt: new Date(),
       },
     })
   } catch (err) {

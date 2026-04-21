@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
+import { mapJotformInterestToCategory } from '@/lib/jotform-map-category'
 
 export type IngestJotformOptions = {
   /** Webhook URL (for QR UTM query params). Omit for API-poll imports. */
@@ -46,6 +47,29 @@ function extractQrCodeIdFromJotformPayload(body: any): string | null {
   return null
 }
 
+/** Parse JotForm submission timestamp from webhook or REST row. */
+export function parseJotformSubmissionDate(body: any): Date | null {
+  const candidates = [
+    body?.created_at,
+    body?.updated_at,
+    body?.createdAt,
+    body?.submissionTime,
+    body?.timestamp,
+    body?.time,
+  ]
+  for (const c of candidates) {
+    if (c == null || c === '') continue
+    if (typeof c === 'number') {
+      const ms = c > 1e12 ? c : c > 1e9 ? c * 1000 : NaN
+      if (!isNaN(ms)) return new Date(ms)
+      continue
+    }
+    const d = new Date(String(c))
+    if (!isNaN(d.getTime())) return d
+  }
+  return null
+}
+
 export type IngestJotformResult = {
   success: true
   contactId: string
@@ -65,6 +89,7 @@ export async function ingestJotformPayload(
   const verbose = options?.verboseLog !== false
   body = normalizeAnswersToArray(body)
   const qrFromRawPayload = extractQrCodeIdFromJotformPayload(body)
+  const submissionAt = parseJotformSubmissionDate(body)
 
   if (verbose) {
     console.log('📥 JotForm ingest:', JSON.stringify(body, null, 2))
@@ -207,6 +232,24 @@ export async function ingestJotformPayload(
       answerMap['dental work'] ||
       answerMap['id_11'] ||
       'PROSPECT'
+
+    for (const [key, val] of Object.entries(answerMap)) {
+      const vv = typeof val === 'string' ? val.trim() : String(val || '').trim()
+      if (!vv) continue
+      const kk = key.toLowerCase()
+      if (
+        kk.includes('interest') ||
+        kk.includes('inquiry') ||
+        kk.includes('organization') ||
+        kk.includes('office type') ||
+        kk.includes('business type') ||
+        kk.includes('partner type') ||
+        kk.includes('your role') ||
+        (kk.includes('type') && (kk.includes('office') || kk.includes('location')))
+      ) {
+        if (!interestType || interestType === 'PROSPECT') interestType = vv
+      }
+    }
 
     appointmentTime =
       answerMap['appointment time'] ||
@@ -352,17 +395,7 @@ export async function ingestJotformPayload(
     status = 'SCHEDULED'
   }
 
-  let category = 'PROSPECT'
-  if (interestType) {
-    const categoryMap: { [key: string]: string } = {
-      Consumer: 'CONSUMER',
-      'Dental Office': 'DENTAL_OFFICE_PARTNER',
-      'Health Office': 'HEALTH_OFFICE_PARTNER',
-      'Business Partner': 'OTHER_BUSINESS_PARTNER',
-      Prospect: 'PROSPECT',
-    }
-    category = categoryMap[interestType] || 'PROSPECT'
-  }
+  const category = mapJotformInterestToCategory(interestType)
 
   if (!firstName && !lastName) {
     const fullName =
@@ -396,6 +429,11 @@ export async function ingestJotformPayload(
   })
 
   if (contact) {
+    const nextSubmissionAt =
+      submissionAt &&
+      (!contact.lastJotformSubmissionAt || submissionAt > contact.lastJotformSubmissionAt)
+        ? submissionAt
+        : contact.lastJotformSubmissionAt
     contact = await prisma.contact.update({
       where: { id: contact.id },
       data: {
@@ -407,6 +445,7 @@ export async function ingestJotformPayload(
         languagePreference: language || contact.languagePreference,
         category: category as any,
         status: status as any,
+        ...(nextSubmissionAt ? { lastJotformSubmissionAt: nextSubmissionAt } : {}),
       },
     })
     if (verbose) console.log('Updated existing contact:', contact.id)
@@ -421,6 +460,7 @@ export async function ingestJotformPayload(
         languagePreference: language,
         category: category as any,
         status: status as any,
+        ...(submissionAt ? { lastJotformSubmissionAt: submissionAt } : {}),
       },
     })
     if (verbose) console.log('Created new contact:', contact.id)
@@ -569,10 +609,12 @@ export async function ingestJotformPayload(
         submissionId,
         contactId: contact.id,
         source: src,
+        submittedAt: submissionAt ?? undefined,
       },
       update: {
         contactId: contact.id,
         source: src,
+        submittedAt: submissionAt ?? undefined,
       },
     })
   }

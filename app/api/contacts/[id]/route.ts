@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 import { encrypt } from '@/lib/encryption'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -37,13 +39,23 @@ export async function GET(
 
     await logAudit('CONTACT_VIEWED', undefined, params.id)
 
-    return NextResponse.json({
-      ...contact,
-      sensitiveData: sensitiveData ? {
-        dob: sensitiveData.dob, // Will be decrypted on frontend if needed
-        ssn: sensitiveData.ssn, // Will be decrypted on frontend if needed
-      } : null,
-    })
+    return NextResponse.json(
+      {
+        ...contact,
+        sensitiveData: sensitiveData
+          ? {
+              dob: sensitiveData.dob,
+              ssn: sensitiveData.ssn,
+            }
+          : null,
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      }
+    )
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message },
@@ -174,3 +186,23 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = params.id
+    const existing = await prisma.contact.findUnique({ where: { id } })
+    if (!existing) {
+      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+    }
+
+    await logAudit('CONTACT_DELETED', undefined, id)
+    await prisma.sensitiveData.deleteMany({ where: { contactId: id } })
+    await prisma.contact.delete({ where: { id } })
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -41,22 +41,19 @@ export default function DashboardPage() {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
 
   useEffect(() => {
-    loadStats()
-  }, [])
-
-  useEffect(() => {
     setChartsReady(true)
   }, [])
 
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
     try {
+      const noStore = { cache: 'no-store' as RequestCache }
       const [contactsRes, campaignsRes, tasksRes, referralRes, qrRes, analyticsRes] = await Promise.all([
-        fetch('/api/contacts'),
-        fetch('/api/campaigns'),
-        fetch('/api/tasks'),
-        fetch('/api/referrals/stats'),
-        fetch('/api/qrcodes/stats'),
-        fetch('/api/analytics'),
+        fetch('/api/contacts', noStore),
+        fetch('/api/campaigns', noStore),
+        fetch('/api/tasks', noStore),
+        fetch('/api/referrals/stats', noStore),
+        fetch('/api/qrcodes/stats', noStore),
+        fetch('/api/analytics', noStore),
       ])
 
       const parseArr = async (res: Response) => {
@@ -121,7 +118,16 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Failed to load stats:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void loadStats()
+  }, [loadStats])
+
+  useEffect(() => {
+    const t = setInterval(() => void loadStats(), 60000)
+    return () => clearInterval(t)
+  }, [loadStats])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 transition-colors">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,12 +23,10 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [dragging, setDragging] = useState<Contact | null>(null)
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/contacts')
+      const res = await fetch('/api/contacts', { cache: 'no-store' })
       const raw = await res.json()
       const data = asArray<Contact>(raw)
       const grouped: Record<string, Contact[]> = { LEAD: [], SCHEDULED: [], ENROLLED: [], ACTIVE_CLIENT: [] }
@@ -36,9 +34,28 @@ export default function PipelinePage() {
         if (!grouped[c.status]) grouped[c.status] = []
         grouped[c.status].push(c)
       }
+      for (const k of Object.keys(grouped)) {
+        grouped[k].sort((a, b) => {
+          const ja = (a as { lastJotformSubmissionAt?: string }).lastJotformSubmissionAt
+          const jb = (b as { lastJotformSubmissionAt?: string }).lastJotformSubmissionAt
+          const ta = ja ? new Date(ja).getTime() : 0
+          const tb = jb ? new Date(jb).getTime() : 0
+          if (tb !== ta) return tb - ta
+          return 0
+        })
+      }
       setColumns(grouped)
     } finally { setLoading(false) }
-  }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  useEffect(() => {
+    const t = setInterval(() => void load(), 60000)
+    return () => clearInterval(t)
+  }, [load])
 
   function onDragStart(contact: Contact) { setDragging(contact) }
   function onDragOver(e: React.DragEvent) { e.preventDefault() }

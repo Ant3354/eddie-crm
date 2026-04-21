@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,7 @@ import { ActivityTimeline } from '@/components/activity-timeline'
 import { 
   User, Mail, Phone, MapPin, Globe, Tag, Edit, ArrowLeft, Upload, Send, 
   FileText, CreditCard, CheckSquare2, TrendingUp, Copy, CheckCircle2, 
-  AlertTriangle, Calendar, Building2, DollarSign, Shield, Sparkles, Printer, MessageSquare
+  AlertTriangle, Calendar, Building2, DollarSign, Shield, Sparkles, Printer, MessageSquare, Trash2
 } from 'lucide-react'
 import Link from 'next/link'
 import { asArray } from '@/lib/as-array'
@@ -29,6 +29,7 @@ interface Contact {
   paymentIssueAlert: boolean
   enrolledDate?: string
   renewalDate?: string
+  lastJotformSubmissionAt?: string
   tags: Array<{ name: string }>
   policies: Array<any>
   tasks: Array<any>
@@ -47,40 +48,10 @@ export default function ContactDetailPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    loadContact()
-    loadReferralStats()
-    loadActivities()
-  }, [params.id])
-
-  async function loadActivities() {
-    try {
-      const res = await fetch(`/api/contacts/${params.id}/activity`)
-      if (res.ok) {
-        const data = await res.json()
-        setActivities(asArray(data))
-      }
-    } catch (error) {
-      console.error('Failed to load activities:', error)
-    }
-  }
-
-  async function loadReferralStats() {
-    try {
-      const res = await fetch(`/api/contacts/${params.id}/referral-stats`)
-      if (res.ok) {
-        const data = await res.json()
-        setReferralStats(data)
-      }
-    } catch (error) {
-      console.error('Failed to load referral stats:', error)
-    }
-  }
-
-  async function loadContact() {
+  const loadContact = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/contacts/${params.id}`)
+      const res = await fetch(`/api/contacts/${params.id}`, { cache: 'no-store' })
       const data = await res.json()
       if (!res.ok || !data || typeof (data as Contact).id !== 'string') {
         setContact(null)
@@ -112,6 +83,55 @@ export default function ContactDetailPage() {
     } finally {
       setLoading(false)
     }
+  }, [params.id])
+
+  useEffect(() => {
+    void loadContact()
+    loadReferralStats()
+    loadActivities()
+  }, [params.id, loadContact])
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      void loadContact()
+    }, 60000)
+    return () => clearInterval(t)
+  }, [loadContact])
+
+  async function loadActivities() {
+    try {
+      const res = await fetch(`/api/contacts/${params.id}/activity`)
+      if (res.ok) {
+        const data = await res.json()
+        setActivities(asArray(data))
+      }
+    } catch (error) {
+      console.error('Failed to load activities:', error)
+    }
+  }
+
+  async function loadReferralStats() {
+    try {
+      const res = await fetch(`/api/contacts/${params.id}/referral-stats`)
+      if (res.ok) {
+        const data = await res.json()
+        setReferralStats(data)
+      }
+    } catch (error) {
+      console.error('Failed to load referral stats:', error)
+    }
+  }
+
+  async function handleDelete() {
+    if (!contact) return
+    if (!confirm(`Delete ${contact.firstName} ${contact.lastName}? This cannot be undone.`)) return
+    const res = await fetch(`/api/contacts/${params.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert((err as { error?: string }).error || 'Delete failed')
+      return
+    }
+    router.push('/contacts')
   }
 
   async function handleSave() {
@@ -313,6 +333,14 @@ export default function ContactDetailPage() {
                     </span>
                   )}
                 </div>
+                {contact.lastJotformSubmissionAt && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    Last JotForm submission:{' '}
+                    <span className="font-medium text-gray-900 dark:text-gray-200">
+                      {new Date(contact.lastJotformSubmissionAt).toLocaleString()}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -321,6 +349,14 @@ export default function ContactDetailPage() {
                   <Button onClick={() => setEditing(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white">
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+                    onClick={() => void handleDelete()}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
                   </Button>
                 </>
               ) : (

@@ -26,6 +26,8 @@ interface QRCodeHistory {
   qrCodeUrl: string
   scanCount: number
   submissionCount?: number
+  lastScanAt?: string | null
+  lastSubmissionAt?: string | null
   createdAt: string
 }
 
@@ -364,6 +366,16 @@ export default function QRCodesPage() {
                             </p>
                           </div>
                         </div>
+                        {(displayQR.lastScanAt || displayQR.lastSubmissionAt) && (
+                          <p className="text-xs text-gray-600 dark:text-gray-400 pt-1">
+                            {displayQR.lastScanAt && (
+                              <>Last scan: {new Date(displayQR.lastScanAt).toLocaleString()} </>
+                            )}
+                            {displayQR.lastSubmissionAt && (
+                              <>· Last submit: {new Date(displayQR.lastSubmissionAt).toLocaleString()}</>
+                            )}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -458,11 +470,17 @@ export default function QRCodesPage() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{qr.jotFormUrl}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Calendar className="w-3 h-3 text-gray-400" />
-                            <p className="text-xs text-gray-500 dark:text-gray-500">
-                              {new Date(qr.createdAt).toLocaleDateString()}
-                            </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-500">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-gray-400" />
+                              Created {new Date(qr.createdAt).toLocaleString()}
+                            </span>
+                            {qr.lastScanAt && (
+                              <span>· Last scan {new Date(qr.lastScanAt).toLocaleString()}</span>
+                            )}
+                            {qr.lastSubmissionAt && (
+                              <span>· Last submit {new Date(qr.lastSubmissionAt).toLocaleString()}</span>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -39,7 +39,9 @@ model Contact {
   updatedAt         DateTime      @updatedAt
   enrolledDate      DateTime?
   renewalDate       DateTime?
-  
+  /// Latest JotForm submission time ingested (webhook or API poll).
+  lastJotformSubmissionAt DateTime?
+
   // Relations
   tags              ContactTag[]
   policies          Policy[]
@@ -65,6 +67,8 @@ model JotformSyncedSubmission {
   contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   // webhook | api_poll
   source         String   @default("api_poll")
+  /// JotForm submission created time when known.
+  submittedAt    DateTime?
   createdAt      DateTime @default(now())
 
   @@index([formId])
@@ -227,6 +231,8 @@ model QrCode {
   scanCount   Int      @default(0)
   // JotForm submissions linked to this QR (webhook/API ingest with qr_code_id).
   submissionCount Int @default(0)
+  lastScanAt       DateTime?
+  lastSubmissionAt DateTime?
   createdAt   DateTime @default(now())
 
   @@index([source])
