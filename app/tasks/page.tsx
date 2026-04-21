@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckSquare2, Plus, Clock, AlertCircle, CheckCircle2, XCircle, User, Calendar, Flag } from 'lucide-react'
+import { CheckSquare2, Plus, Clock, AlertCircle, CheckCircle2, XCircle, User, Calendar, Flag, Trash2 } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
+import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
 
 interface Task {
   id: string
@@ -18,13 +19,16 @@ interface Task {
     id: string
     firstName: string
     lastName: string
+    mobilePhone?: string
+    address?: string
   }
 }
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState({ status: '', priority: '' })
+  const [filter, setFilter] = useState({ status: '', priority: '', appointmentsOnly: false })
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [stats, setStats] = useState({ total: 0, pending: 0, urgent: 0, overdue: 0 })
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTask, setNewTask] = useState({
@@ -34,24 +38,97 @@ export default function TasksPage() {
     dueDate: '',
     contactId: '',
   })
-  const [contacts, setContacts] = useState<Array<{ id: string; firstName: string; lastName: string }>>([])
+  const [contacts, setContacts] = useState<
+    Array<{ id: string; firstName: string; lastName: string; mobilePhone?: string; address?: string }>
+  >([])
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadTasks()
-    loadContacts()
-  }, [filter])
-
-  async function loadContacts() {
+  const loadContacts = useCallback(async () => {
     try {
-      const res = await fetch('/api/contacts')
+      const res = await fetch('/api/contacts', { cache: 'no-store' })
       const raw = await res.json()
-      const data = asArray<{ id: string; firstName: string; lastName: string }>(raw)
-      setContacts(data.map((c) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName })))
+      const data = asArray<{
+        id: string
+        firstName: string
+        lastName: string
+        mobilePhone?: string
+        address?: string
+      }>(raw)
+      setContacts(
+        data.map((c) => ({
+          id: c.id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          mobilePhone: c.mobilePhone,
+          address: c.address,
+        }))
+      )
     } catch (error) {
       console.error('Failed to load contacts:', error)
     }
-  }
+  }, [])
+
+  const loadTasks = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/tasks', { cache: 'no-store' })
+      const raw = await res.json()
+      const data = asArray<Task>(raw)
+      let filtered = data
+
+      if (filter.status) {
+        filtered = filtered.filter((t) => t.status === filter.status)
+      }
+      if (filter.priority) {
+        filtered = filtered.filter((t) => t.priority === filter.priority)
+      }
+      if (filter.appointmentsOnly) {
+        filtered = filtered.filter((t) => {
+          const blob = `${t.title || ''} ${t.description || ''}`.toLowerCase()
+          return blob.includes('appointment') || blob.includes('schedule')
+        })
+      }
+
+      setTasks(filtered)
+
+      const now = new Date()
+      setStats({
+        total: data.length,
+        pending: data.filter((t) => t.status === 'PENDING').length,
+        urgent: data.filter((t) => t.priority === 'URGENT').length,
+        overdue: data.filter(
+          (t) => t.status === 'PENDING' && t.dueDate && new Date(t.dueDate) < now
+        ).length,
+      })
+    } catch (error) {
+      console.error('Failed to load tasks:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [filter])
+
+  useEffect(() => {
+    void loadTasks()
+    void loadContacts()
+  }, [filter, loadTasks, loadContacts])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      void loadTasks()
+      void loadContacts()
+    }, 10000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        void loadTasks()
+        void loadContacts()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [loadTasks, loadContacts])
 
   async function handleCreateTask() {
     if (!newTask.title.trim()) {
@@ -76,7 +153,7 @@ export default function TasksPage() {
       if (res.ok) {
         setNewTask({ title: '', description: '', priority: 'MEDIUM', dueDate: '', contactId: '' })
         setShowNewTask(false)
-        loadTasks()
+        await loadTasks()
       } else {
         const error = await res.json()
         alert('Failed to create task: ' + (error.error || 'Unknown error'))
@@ -86,39 +163,6 @@ export default function TasksPage() {
       alert('Failed to create task')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function loadTasks() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/tasks')
-      const raw = await res.json()
-      const data = asArray<Task>(raw)
-      let filtered = data
-
-      if (filter.status) {
-        filtered = filtered.filter((t) => t.status === filter.status)
-      }
-      if (filter.priority) {
-        filtered = filtered.filter((t) => t.priority === filter.priority)
-      }
-
-      setTasks(filtered)
-
-      const now = new Date()
-      setStats({
-        total: data.length,
-        pending: data.filter((t) => t.status === 'PENDING').length,
-        urgent: data.filter((t) => t.priority === 'URGENT').length,
-        overdue: data.filter(
-          (t) => t.status === 'PENDING' && t.dueDate && new Date(t.dueDate) < now
-        ).length,
-      })
-    } catch (error) {
-      console.error('Failed to load tasks:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -155,6 +199,43 @@ export default function TasksPage() {
   const isOverdue = (dueDate?: string) => {
     if (!dueDate) return false
     return new Date(dueDate) < new Date() && filter.status !== 'COMPLETED'
+  }
+
+  const selectedIds = Object.entries(selected)
+    .filter(([, v]) => v)
+    .map(([id]) => id)
+
+  async function bulkCompleteSelected() {
+    if (selectedIds.length === 0) return
+    const res = await fetch('/api/tasks/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskIds: selectedIds, action: 'complete' }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert((err as { error?: string }).error || 'Bulk update failed')
+      return
+    }
+    setSelected({})
+    await loadTasks()
+  }
+
+  async function bulkDeleteSelected() {
+    if (selectedIds.length === 0) return
+    if (!confirm(`Delete ${selectedIds.length} selected task(s)? This cannot be undone.`)) return
+    const res = await fetch('/api/tasks/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskIds: selectedIds, action: 'delete' }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert((err as { error?: string }).error || 'Bulk delete failed')
+      return
+    }
+    setSelected({})
+    await loadTasks()
   }
 
   return (
@@ -307,11 +388,14 @@ export default function TasksPage() {
                       onChange={(e) => setNewTask({ ...newTask, contactId: e.target.value })}
                     >
                       <option value="">No Contact</option>
-                      {contacts.map((contact) => (
+                      {contacts.map((contact) => {
+                        const d = getContactDisplayIdentity(contact)
+                        return (
                         <option key={contact.id} value={contact.id}>
-                          {contact.firstName} {contact.lastName}
+                          {d.firstName} {d.lastName}
                         </option>
-                      ))}
+                        )
+                      })}
                     </select>
                   </div>
                 </div>
@@ -342,6 +426,19 @@ export default function TasksPage() {
           <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-gray-200/50 dark:border-gray-700/50 shadow-xl mb-6">
             <CardContent className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2 flex flex-wrap items-center gap-4 pb-2 border-b border-gray-200 dark:border-gray-700 mb-4">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 dark:border-gray-600"
+                      checked={filter.appointmentsOnly}
+                      onChange={(e) =>
+                        setFilter({ ...filter, appointmentsOnly: e.target.checked })
+                      }
+                    />
+                    Show appointment-related tasks only (title or description mentions appointment / schedule)
+                  </label>
+                </div>
                 <div>
                   <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Status</label>
                   <select
@@ -373,6 +470,39 @@ export default function TasksPage() {
               </div>
             </CardContent>
           </Card>
+
+          {selectedIds.length > 0 && (
+            <Card className="bg-amber-50/90 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-700 shadow-lg mb-6">
+              <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {selectedIds.length} task{selectedIds.length === 1 ? '' : 's'} selected
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-green-600 text-green-800 dark:text-green-300"
+                    onClick={() => void bulkCompleteSelected()}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark complete
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-red-500 text-red-700 dark:text-red-400"
+                    onClick={() => void bulkDeleteSelected()}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete selected
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelected({})}>
+                    Clear selection
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Tasks List */}
@@ -383,12 +513,34 @@ export default function TasksPage() {
           </div>
         ) : (
           <div className="grid gap-4">
+            {tasks.length > 0 && (
+              <div className="flex items-center gap-2 px-1 -mt-2 mb-1">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 dark:border-gray-600"
+                  checked={tasks.length > 0 && tasks.every((t) => selected[t.id])}
+                  onChange={(e) => {
+                    const on = e.target.checked
+                    setSelected((prev) => {
+                      const next = { ...prev }
+                      for (const t of tasks) {
+                        if (on) next[t.id] = true
+                        else delete next[t.id]
+                      }
+                      return next
+                    })
+                  }}
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">Select all visible</span>
+              </div>
+            )}
             {tasks.map((task) => {
               const PriorityIcon = priorityColors[task.priority]?.icon || Flag
               const StatusIcon = statusIcons[task.status] || Clock
               const overdue = isOverdue(task.dueDate)
               const dueSoon = task.dueDate ? (new Date(task.dueDate).getTime() - Date.now()) < 24*60*60*1000 && (new Date(task.dueDate) > new Date()) : false
-              
+              const taskContactDisplay = task.contact ? getContactDisplayIdentity(task.contact) : null
+
               return (
                 <Card
                   key={task.id}
@@ -405,6 +557,14 @@ export default function TasksPage() {
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 mt-0.5 rounded border-gray-300 dark:border-gray-600"
+                            checked={!!selected[task.id]}
+                            onChange={(e) =>
+                              setSelected((p) => ({ ...p, [task.id]: e.target.checked }))
+                            }
+                          />
                           <h3 className="text-lg font-bold text-gray-900 dark:text-white">{task.title}</h3>
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 ${
@@ -431,13 +591,13 @@ export default function TasksPage() {
                           <p className="text-gray-600 dark:text-gray-400 mb-3">{task.description}</p>
                         )}
                         <div className="flex flex-wrap items-center gap-4">
-                          {task.contact && (
+                          {task.contact && taskContactDisplay && (
                             <Link
                               href={`/contacts/${task.contact.id}`}
                               className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
                             >
                               <User className="w-4 h-4" />
-                              {task.contact.firstName} {task.contact.lastName}
+                              {taskContactDisplay.firstName} {taskContactDisplay.lastName}
                             </Link>
                           )}
                           {task.dueDate && (

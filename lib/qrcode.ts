@@ -93,13 +93,16 @@ export async function trackQRScan(qrCodeId: string) {
 /** Counts a JotForm submission tied to this QR (webhook / ingest with qr_code_id). */
 export async function trackQRSubmission(qrCodeId: string) {
   try {
-    await prisma.qrCode.update({
+    const res = await prisma.qrCode.updateMany({
       where: { id: qrCodeId },
       data: {
         submissionCount: { increment: 1 },
         lastSubmissionAt: new Date(),
       },
     })
+    if (res.count === 0) {
+      console.warn('[trackQRSubmission] no QR row for id (wrong env DB or stale qr_code_id):', qrCodeId)
+    }
   } catch (err) {
     console.error('[trackQRSubmission] skipped:', qrCodeId, err)
   }

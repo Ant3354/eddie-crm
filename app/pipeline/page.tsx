@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LayoutGrid, Users, ArrowLeft } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
+import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
 
 interface Contact {
   id: string
@@ -13,6 +14,7 @@ interface Contact {
   lastName: string
   email?: string
   mobilePhone?: string
+  address?: string
   status: 'LEAD' | 'SCHEDULED' | 'ENROLLED' | 'ACTIVE_CLIENT'
 }
 
@@ -53,8 +55,15 @@ export default function PipelinePage() {
   }, [load])
 
   useEffect(() => {
-    const t = setInterval(() => void load(), 60000)
-    return () => clearInterval(t)
+    const t = setInterval(() => void load(), 10000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void load()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [load])
 
   function onDragStart(contact: Contact) { setDragging(contact) }
@@ -118,18 +127,21 @@ export default function PipelinePage() {
                     onDragOver={onDragOver}
                     onDrop={() => onDrop(status)}
                   >
-                    {columns[status]?.map(contact => (
+                    {columns[status]?.map((contact) => {
+                      const d = getContactDisplayIdentity(contact)
+                      return (
                       <div
                         key={contact.id}
                         draggable
                         onDragStart={() => onDragStart(contact)}
                         className="p-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg cursor-grab active:cursor-grabbing hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                       >
-                        <div className="font-semibold text-sm text-gray-900 dark:text-white">{contact.firstName} {contact.lastName}</div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400">{contact.email || contact.mobilePhone || '—'}</div>
+                        <div className="font-semibold text-sm text-gray-900 dark:text-white">{d.firstName} {d.lastName}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">{contact.email || d.phone || '—'}</div>
                         <Link href={`/contacts/${contact.id}`} className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">View</Link>
                       </div>
-                    ))}
+                      )
+                    })}
                     {(!columns[status] || columns[status].length === 0) && (
                       <div className="text-xs text-center text-gray-500 dark:text-gray-400 py-6">Drop contacts here</div>
                     )}

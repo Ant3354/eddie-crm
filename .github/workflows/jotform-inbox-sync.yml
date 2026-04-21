@@ -1,6 +1,13 @@
-# Optional: poll JotForm every 5 minutes on any GitHub plan (complements Vercel Hobby,
-# which only allows cron once per day). Add repo secrets: CRON_SECRET, VERCEL_PRODUCTION_URL
-# (e.g. https://eddie-crm-khaki.vercel.app — no trailing slash).
+# Near–real-time JotForm inbox import when Vercel Hobby limits you to one cron/day.
+# This workflow calls production GET /api/cron/jotform-sync every 5 minutes.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CRON_SECRET              Same value as CRON_SECRET on Vercel (Production env).
+#   VERCEL_PRODUCTION_URL    e.g. https://eddie-crm-khaki.vercel.app  (no trailing slash)
+#
+# Notes:
+# - GitHub may delay scheduled runs by a few minutes on busy periods; 5m is the target interval.
+# - Use "Run workflow" (workflow_dispatch) to test after adding secrets.
 
 name: JotForm inbox sync
 
@@ -9,19 +16,44 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: jotform-inbox-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Trigger CRM JotForm sync
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           BASE_URL: ${{ secrets.VERCEL_PRODUCTION_URL }}
         run: |
-          if [ -z "$CRON_SECRET" ] || [ -z "$BASE_URL" ]; then
-            echo "Skip: set CRON_SECRET and VERCEL_PRODUCTION_URL in repo secrets to enable."
+          set -eu
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${BASE_URL:-}" ]; then
+            echo "::notice title=JotForm sync disabled::Add repo secrets CRON_SECRET and VERCEL_PRODUCTION_URL to enable scheduled imports."
             exit 0
           fi
-          curl -fsS -X GET "${BASE_URL}/api/cron/jotform-sync" \
+          # Trim whitespace and trailing slash from URL
+          BASE_URL="$(printf '%s' "$BASE_URL" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          BASE_URL="${BASE_URL%/}"
+          if ! printf '%s' "$BASE_URL" | grep -qE '^https://'; then
+            echo "::error::VERCEL_PRODUCTION_URL must start with https:// (got: ${BASE_URL})"
+            exit 1
+          fi
+          echo "Calling ${BASE_URL}/api/cron/jotform-sync"
+          code=$(curl -sS --max-time 180 -o /tmp/jotform-sync-body.txt -w "%{http_code}" \
+            -X GET "${BASE_URL}/api/cron/jotform-sync" \
             -H "Authorization: Bearer ${CRON_SECRET}" \
-            -H "Accept: application/json"
+            -H "Accept: application/json")
+          echo "HTTP ${code}"
+          cat /tmp/jotform-sync-body.txt
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::JotForm sync returned HTTP ${code}"
+            exit 1
+          fi

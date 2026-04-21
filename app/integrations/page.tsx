@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { readOfflineModeFromEnv, setOfflineModeOverride, useOfflineMode, OFFLINE_MODE_EVENT } from '@/lib/offline-mode'
+import { EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY } from '@/lib/jotform-sync-ui'
 
 export default function IntegrationsPage() {
   const offlineEffective = useOfflineMode()
@@ -40,6 +41,17 @@ export default function IntegrationsPage() {
   const [jotformApiJson, setJotformApiJson] = useState<string | null>(null)
   const [jotformSyncLoading, setJotformSyncLoading] = useState(false)
   const [jotformSyncJson, setJotformSyncJson] = useState<string | null>(null)
+  const [syncBearer, setSyncBearer] = useState('')
+  const [rememberSyncBearer, setRememberSyncBearer] = useState(true)
+
+  useEffect(() => {
+    try {
+      const v = sessionStorage.getItem(EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY)
+      if (v) setSyncBearer(v)
+    } catch {
+      /* private mode / SSR */
+    }
+  }, [])
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
@@ -219,29 +231,76 @@ export default function IntegrationsPage() {
                     {jotformApiJson}
                   </pre>
                 ) : null}
-                <div className="border-t border-blue-200/60 dark:border-blue-800/60 pt-4 space-y-2">
+                <div className="border-t border-blue-200/60 dark:border-blue-800/60 pt-4 space-y-3">
                   <p className="text-xs text-gray-600 dark:text-gray-400">
-                    <strong>Inbox sync now:</strong> pulls new submissions from all discovered JotForm forms (same as
-                    scheduled sync). Paste your <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">CRON_SECRET</code>{' '}
-                    (Vercel → same value as the cron job uses).
+                    <strong>Instant inbox sync:</strong> runs the same import as the scheduled job, immediately. Use{' '}
+                    <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">CRON_SECRET</code> as the bearer, or set a
+                    dedicated <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">EDDIE_UI_SYNC_SECRET</code> in
+                    Vercel and paste that here instead (narrower blast radius than sharing the full cron secret).
                   </p>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Bearer token (CRON_SECRET or EDDIE_UI_SYNC_SECRET)
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-mono"
+                      placeholder="Stored for this browser session if you enable “Remember” below"
+                      value={syncBearer}
+                      onChange={(e) => setSyncBearer(e.target.value)}
+                    />
+                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={rememberSyncBearer}
+                        onChange={(e) => {
+                          const on = e.target.checked
+                          setRememberSyncBearer(on)
+                          if (!on) {
+                            try {
+                              sessionStorage.removeItem(EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY)
+                            } catch {
+                              /* ignore */
+                            }
+                          }
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600"
+                      />
+                      Remember in this browser (sessionStorage — cleared when you uncheck)
+                    </label>
+                  </div>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     disabled={jotformSyncLoading}
                     onClick={async () => {
-                      const secret = typeof window !== 'undefined' ? window.prompt('CRON_SECRET')?.trim() : ''
-                      if (!secret) return
+                      let token = syncBearer.trim()
+                      if (!token && typeof window !== 'undefined') {
+                        token =
+                          window.prompt('Paste CRON_SECRET or EDDIE_UI_SYNC_SECRET (same value as in Vercel env)')?.trim() ||
+                          ''
+                      }
+                      if (!token) return
                       setJotformSyncLoading(true)
                       setJotformSyncJson(null)
                       try {
-                        const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/cron/jotform-sync`
+                        const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/integrations/jotform-sync-now`
                         const res = await fetch(url, {
-                          headers: { Authorization: `Bearer ${secret}` },
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${token}` },
                         })
                         const data = await res.json().catch(() => ({ error: 'Invalid JSON' }))
                         setJotformSyncJson(JSON.stringify({ ok: res.ok, status: res.status, ...data }, null, 2))
+                        if (res.ok && rememberSyncBearer && typeof window !== 'undefined') {
+                          try {
+                            sessionStorage.setItem(EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY, token)
+                            setSyncBearer(token)
+                          } catch {
+                            /* ignore */
+                          }
+                        }
                       } catch (e) {
                         setJotformSyncJson(
                           JSON.stringify(
@@ -264,7 +323,7 @@ export default function IntegrationsPage() {
                     ) : (
                       <>
                         <Play className="h-4 w-4" />
-                        Run inbox sync now
+                        Sync inbox now (instant)
                       </>
                     )}
                   </Button>
@@ -274,9 +333,12 @@ export default function IntegrationsPage() {
                     </pre>
                   ) : null}
                   <p className="text-[11px] text-gray-500 dark:text-gray-500">
-                    Vercel Hobby only allows cron once per day. For near–real-time imports, add the GitHub Action in{' '}
-                    <code className="text-[10px]">.github/workflows/jotform-inbox-sync.yml</code> with repo secrets{' '}
-                    <code className="text-[10px]">CRON_SECRET</code> and <code className="text-[10px]">VERCEL_PRODUCTION_URL</code>.
+                    Vercel Hobby only allows cron once per day. For automatic polling every 5 minutes, enable the GitHub
+                    Action in <code className="text-[10px]">.github/workflows/jotform-inbox-sync.yml</code> with secrets{' '}
+                    <code className="text-[10px]">CRON_SECRET</code> and{' '}
+                    <code className="text-[10px]">VERCEL_PRODUCTION_URL</code>. It calls{' '}
+                    <code className="text-[10px]">GET /api/cron/jotform-sync</code> with the same Bearer token as this
+                    manual sync (when using <code className="text-[10px]">CRON_SECRET</code>).
                   </p>
                 </div>
               </div>

@@ -13,6 +13,7 @@ import {
 import Link from 'next/link'
 import { asArray } from '@/lib/as-array'
 import { useOfflineMode } from '@/lib/offline-mode'
+import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
 
 interface Contact {
   id: string
@@ -30,6 +31,10 @@ interface Contact {
   enrolledDate?: string
   renewalDate?: string
   lastJotformSubmissionAt?: string
+  gender?: string | null
+  preferredContactTime?: string | null
+  leadNotes?: string | null
+  jotformIntakeSummary?: string | null
   tags: Array<{ name: string }>
   policies: Array<any>
   tasks: Array<any>
@@ -65,12 +70,13 @@ export default function ContactDetailPage() {
         files: asArray((data as Contact).files),
       }
       setContact(normalized)
+      const idv = getContactDisplayIdentity(normalized)
       setFormData({
-        firstName: normalized.firstName,
-        lastName: normalized.lastName,
+        firstName: idv.firstName,
+        lastName: idv.lastName,
         email: normalized.email || '',
-        mobilePhone: normalized.mobilePhone || '',
-        address: normalized.address || '',
+        mobilePhone: idv.phone,
+        address: idv.address,
         languagePreference: normalized.languagePreference || 'English',
         category: normalized.category,
         status: normalized.status,
@@ -94,8 +100,16 @@ export default function ContactDetailPage() {
   useEffect(() => {
     const t = setInterval(() => {
       void loadContact()
-    }, 60000)
+    }, 10000)
     return () => clearInterval(t)
+  }, [loadContact])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void loadContact()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
   }, [loadContact])
 
   async function loadActivities() {
@@ -124,7 +138,8 @@ export default function ContactDetailPage() {
 
   async function handleDelete() {
     if (!contact) return
-    if (!confirm(`Delete ${contact.firstName} ${contact.lastName}? This cannot be undone.`)) return
+    const idv = getContactDisplayIdentity(contact)
+    if (!confirm(`Delete ${idv.firstName} ${idv.lastName}? This cannot be undone.`)) return
     const res = await fetch(`/api/contacts/${params.id}`, { method: 'DELETE' })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -203,13 +218,14 @@ export default function ContactDetailPage() {
   }
 
   function buildPortalPlainText(c: Contact) {
+    const id = getContactDisplayIdentity(c)
     const origin = typeof window !== 'undefined' ? window.location.origin : ''
     const pol = c.policies?.[0]
     const portalLine =
       pol?.memberPortalLink || `${origin}/portal?contact=${c.id}`
     const appt = `${origin}/appointments?contact=${c.id}`
     return [
-      `Hi ${c.firstName},`,
+      `Hi ${id.firstName},`,
       ``,
       `Member portal: ${portalLine}`,
       pol?.pharmacyLink ? `Pharmacy / lookup: ${pol.pharmacyLink}` : null,
@@ -230,7 +246,8 @@ export default function ContactDetailPage() {
   }
 
   function openPortalSms(c: Contact) {
-    const raw = (c.mobilePhone || '').replace(/\D/g, '')
+    const id = getContactDisplayIdentity(c)
+    const raw = (id.phone || '').replace(/\D/g, '')
     if (!raw) return
     const normalized = raw.length === 10 ? `+1${raw}` : raw.startsWith('1') && raw.length === 11 ? `+${raw}` : `+${raw.replace(/^\+/, '')}`
     const body = encodeURIComponent(buildPortalPlainText(c).slice(0, 300))
@@ -272,6 +289,8 @@ export default function ContactDetailPage() {
       </div>
     )
   }
+
+  const display = getContactDisplayIdentity(contact)
 
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
@@ -317,7 +336,7 @@ export default function ContactDetailPage() {
               </div>
               <div>
                 <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent mb-2">
-                  {contact.firstName} {contact.lastName}
+                  {display.firstName} {display.lastName}
                 </h1>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getCategoryColor(contact.category)}`}>
@@ -543,23 +562,23 @@ export default function ContactDetailPage() {
                         </div>
                       </div>
                     )}
-                    {contact.mobilePhone && (
+                    {display.phone && (
                       <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                         <Phone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         <div>
                           <p className="text-xs text-gray-500 dark:text-gray-500">Phone</p>
-                          <a href={`tel:${contact.mobilePhone}`} className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
-                            {contact.mobilePhone}
+                          <a href={`tel:${display.phone.replace(/\s/g, '')}`} className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
+                            {display.phone}
                           </a>
                         </div>
                       </div>
                     )}
-                    {contact.address && (
+                    {display.address && (
                       <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                         <MapPin className="w-5 h-5 text-gray-600 dark:text-gray-400 mt-0.5" />
                         <div>
                           <p className="text-xs text-gray-500 dark:text-gray-500">Address</p>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{contact.address}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{display.address}</p>
                         </div>
                       </div>
                     )}
@@ -597,6 +616,53 @@ export default function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* JotForm / dental intake answers */}
+          {(contact.jotformIntakeSummary ||
+            contact.leadNotes ||
+            contact.gender ||
+            contact.preferredContactTime) && (
+            <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-indigo-200/50 dark:border-indigo-800/50 shadow-xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-violet-500"></div>
+              <CardHeader className="relative z-10">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  Intake &amp; JotForm responses
+                </CardTitle>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-normal mt-1">
+                  Pulled from the latest form submission (dental survey, best time to reach, notes, etc.).
+                </p>
+              </CardHeader>
+              <CardContent className="relative z-10 space-y-3 text-sm">
+                {contact.gender ? (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">Gender</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{contact.gender}</p>
+                  </div>
+                ) : null}
+                {contact.preferredContactTime ? (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">Best time to reach</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{contact.preferredContactTime}</p>
+                  </div>
+                ) : null}
+                {contact.leadNotes ? (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">Summary notes</p>
+                    <p className="font-medium text-gray-900 dark:text-white whitespace-pre-wrap">{contact.leadNotes}</p>
+                  </div>
+                ) : null}
+                {contact.jotformIntakeSummary ? (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mb-1">All captured answers</p>
+                    <pre className="text-xs font-sans whitespace-pre-wrap bg-gray-50 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-80 overflow-y-auto text-gray-800 dark:text-gray-200">
+                      {contact.jotformIntakeSummary}
+                    </pre>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Quick Actions */}
           <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-green-200/50 dark:border-green-800/50 shadow-xl hover:shadow-2xl transition-all duration-500">
@@ -640,7 +706,7 @@ export default function ContactDetailPage() {
                     type="button"
                     variant="outline"
                     className="w-full border-green-600 text-green-800 dark:text-green-300"
-                    disabled={!contact.mobilePhone}
+                    disabled={!display.phone}
                     onClick={() => openPortalSms(contact)}
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />

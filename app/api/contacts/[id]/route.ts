@@ -17,6 +17,7 @@ export async function GET(
         policies: true,
         tasks: true,
         files: true,
+        ownerUser: { select: { id: true, name: true, email: true } },
         campaigns: {
           include: {
             campaign: true,
@@ -86,6 +87,11 @@ export async function PATCH(
       renewalDate,
       dob,
       ssn,
+      gender,
+      preferredContactTime,
+      leadNotes,
+      jotformIntakeSummary,
+      ownerUserId,
     } = body
 
     // Get old contact for audit
@@ -143,6 +149,11 @@ export async function PATCH(
     }
     if (enrolledDate !== undefined) updateData.enrolledDate = enrolledDate ? new Date(enrolledDate) : null
     if (renewalDate !== undefined) updateData.renewalDate = renewalDate ? new Date(renewalDate) : null
+    if (gender !== undefined) updateData.gender = gender || null
+    if (preferredContactTime !== undefined) updateData.preferredContactTime = preferredContactTime || null
+    if (leadNotes !== undefined) updateData.leadNotes = leadNotes || null
+    if (jotformIntakeSummary !== undefined) updateData.jotformIntakeSummary = jotformIntakeSummary || null
+    if (ownerUserId !== undefined) updateData.ownerUserId = ownerUserId || null
 
     const contact = await prisma.contact.update({
       where: { id: params.id },

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { trackQRScan } from '@/lib/qrcode'
 import { logAudit } from '@/lib/audit'
+import { mergeIntakeDuplicates } from '@/lib/contact-merge'
+import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
 
 function mapInterestToCategory(interestType: string): string {
   const t = (interestType || '').trim()
@@ -71,11 +74,14 @@ export async function POST(request: NextRequest) {
       qr.source ||
       'Local intake'
 
+    const identityOr: Prisma.ContactWhereInput[] = []
+    if (em) identityOr.push({ email: { equals: em, mode: 'insensitive' } })
+    if (phone) identityOr.push({ mobilePhone: phone })
+
     let contact = await prisma.contact.findFirst({
-      where: {
-        OR: [...(em ? [{ email: em }] : []), ...(phone ? [{ mobilePhone: phone }] : [])],
-      },
+      where: { OR: identityOr },
     })
+    const isNewContact = !contact
 
     if (contact) {
       contact = await prisma.contact.update({
@@ -104,6 +110,24 @@ export async function POST(request: NextRequest) {
           status: status as any,
         },
       })
+    }
+
+    try {
+      const merged = await mergeIntakeDuplicates(contact.id, { email: em || null, mobilePhone: phone || null })
+      if (merged > 0) console.log('Local intake: merged duplicate contacts:', merged)
+    } catch (e) {
+      console.warn('Local intake: duplicate merge skipped:', e)
+    }
+
+    try {
+      await applyIntakePipelineRules({
+        contactId: contact.id,
+        isNewContact,
+        source,
+        qrCodeId,
+      })
+    } catch (e) {
+      console.warn('Local intake: pipeline rules error:', e)
     }
 
     await prisma.contactTag.upsert({

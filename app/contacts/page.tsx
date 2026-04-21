@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Search, Filter, Download, Upload, Plus, Mail, Phone, AlertTriangle, Tag, Calendar, TrendingUp, Save as SaveIcon, Trash2 } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
+import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
 
 interface Contact {
   id: string
@@ -13,6 +14,7 @@ interface Contact {
   lastName: string
   email?: string
   mobilePhone?: string
+  address?: string
   category: string
   status: string
   paymentIssueAlert: boolean
@@ -67,8 +69,15 @@ export default function ContactsPage() {
   useEffect(() => {
     const t = setInterval(() => {
       void loadContacts()
-    }, 60000)
-    return () => clearInterval(t)
+    }, 10000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void loadContacts()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [loadContacts])
 
   async function bulkAddTag() {
@@ -387,7 +396,9 @@ export default function ContactsPage() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {contacts.map((contact) => (
+            {contacts.map((contact) => {
+              const display = getContactDisplayIdentity(contact)
+              return (
               <Card
                 key={contact.id}
                 className={`group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${
@@ -409,7 +420,7 @@ export default function ContactsPage() {
                         />
                         <Link href={`/contacts/${contact.id}`}>
                           <h3 className="text-xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                            {contact.firstName} {contact.lastName}
+                            {display.firstName} {display.lastName}
                           </h3>
                         </Link>
                         {contact.paymentIssueAlert && (
@@ -426,10 +437,10 @@ export default function ContactsPage() {
                             {contact.email}
                           </div>
                         )}
-                        {contact.mobilePhone && (
+                        {display.phone && (
                           <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                             <Phone className="w-4 h-4" />
-                            {contact.mobilePhone}
+                            {display.phone}
                           </div>
                         )}
                         {contact.enrolledDate && (
@@ -471,7 +482,8 @@ export default function ContactsPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              )
+            })}
             {contacts.length === 0 && (
               <Card className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
                 <CardContent className="p-12 text-center">

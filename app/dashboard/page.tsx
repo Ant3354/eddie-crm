@@ -2,9 +2,23 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { LineChart, Line, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Users, AlertTriangle, Megaphone, CheckSquare2, MousePointerClick, QrCode, TrendingUp, Activity } from 'lucide-react'
+import {
+  Users,
+  AlertTriangle,
+  Megaphone,
+  CheckSquare2,
+  MousePointerClick,
+  QrCode,
+  TrendingUp,
+  Activity,
+  HelpCircle,
+  UploadCloud,
+  Loader2,
+} from 'lucide-react'
+import { EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY } from '@/lib/jotform-sync-ui'
 
 type ChartRow = Record<string, unknown>
 
@@ -13,6 +27,15 @@ interface ChartDataState {
   contactsByStatus: ChartRow[]
   referralTrend: ChartRow[]
   campaignPerformance: ChartRow[]
+  intakeByReferralSource: { name: string; count: number }[]
+  acquisitionFunnel: {
+    totalContacts: number
+    qrScansTotal: number
+    qrSubmissionsTotal: number
+    referralConversionsTotal: number
+    referralConversionRate: number
+    qrSubmissionRate: number
+  } | null
 }
 
 const emptyCharts: ChartDataState = {
@@ -20,6 +43,8 @@ const emptyCharts: ChartDataState = {
   contactsByStatus: [],
   referralTrend: [],
   campaignPerformance: [],
+  intakeByReferralSource: [],
+  acquisitionFunnel: null,
 }
 
 export default function DashboardPage() {
@@ -37,6 +62,8 @@ export default function DashboardPage() {
     qrSubmissions: 0,
   })
   const [chartData, setChartData] = useState<ChartDataState>(emptyCharts)
+  const [jotformSyncLoading, setJotformSyncLoading] = useState(false)
+  const [jotformSyncMsg, setJotformSyncMsg] = useState<string | null>(null)
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
 
@@ -97,6 +124,11 @@ export default function DashboardPage() {
             contactsByStatus: Array.isArray(raw.contactsByStatus) ? raw.contactsByStatus : [],
             referralTrend: Array.isArray(raw.referralTrend) ? raw.referralTrend : [],
             campaignPerformance: Array.isArray(raw.campaignPerformance) ? raw.campaignPerformance : [],
+            intakeByReferralSource: Array.isArray(raw.intakeByReferralSource) ? raw.intakeByReferralSource : [],
+            acquisitionFunnel:
+              raw.acquisitionFunnel && typeof raw.acquisitionFunnel === 'object'
+                ? (raw.acquisitionFunnel as ChartDataState['acquisitionFunnel'])
+                : null,
           }
         } catch {
           /* keep defaults */
@@ -120,13 +152,71 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const syncJotformNow = useCallback(async () => {
+    setJotformSyncMsg(null)
+    let token = ''
+    try {
+      token = typeof window !== 'undefined' ? sessionStorage.getItem(EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY) || '' : ''
+    } catch {
+      token = ''
+    }
+    if (!token && typeof window !== 'undefined') {
+      token =
+        window.prompt(
+          'Paste CRON_SECRET or EDDIE_UI_SYNC_SECRET (same as Vercel env). It is stored in this browser session for one-click sync.'
+        )?.trim() || ''
+      if (token) {
+        try {
+          sessionStorage.setItem(EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY, token)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (!token) {
+      setJotformSyncMsg('No token — open Integrations to save one, or paste when prompted.')
+      return
+    }
+    setJotformSyncLoading(true)
+    try {
+      const res = await fetch('/api/integrations/jotform-sync-now', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setJotformSyncMsg(typeof data.error === 'string' ? data.error : `Sync failed (${res.status})`)
+      } else {
+        const imported = typeof data.imported === 'number' ? data.imported : undefined
+        setJotformSyncMsg(
+          data.success
+            ? `Sync OK${imported !== undefined ? ` — ${imported} processed` : ''}.`
+            : (data.message as string) || 'Sync finished.'
+        )
+        await loadStats()
+      }
+    } catch (e) {
+      setJotformSyncMsg(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setJotformSyncLoading(false)
+    }
+  }, [loadStats])
+
   useEffect(() => {
     void loadStats()
   }, [loadStats])
 
   useEffect(() => {
-    const t = setInterval(() => void loadStats(), 60000)
-    return () => clearInterval(t)
+    const t = setInterval(() => void loadStats(), 10000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void loadStats()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [loadStats])
 
   return (
@@ -139,15 +229,43 @@ export default function DashboardPage() {
       
       <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="mb-10">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 rounded-xl shadow-lg">
-              <Activity className="w-6 h-6 text-white" />
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 rounded-xl shadow-lg">
+                <Activity className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent mb-2">
+                  Dashboard
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400 text-lg">Real-time overview of your CRM performance</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent mb-2">
-                Dashboard
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400 text-lg">Real-time overview of your CRM performance</p>
+            <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="secondary"
+                className="gap-2 border-2 border-blue-200 dark:border-blue-800 shadow-md"
+                disabled={jotformSyncLoading}
+                onClick={() => void syncJotformNow()}
+              >
+                {jotformSyncLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="w-4 h-4" />
+                )}
+                Sync JotForm now
+              </Button>
+              <p className="text-xs text-gray-500 dark:text-gray-500 max-w-xs text-right">
+                Pulls the inbox immediately when the webhook lags. Uses the token from Integrations (saved in this
+                browser) or prompts once.
+              </p>
+              <Link href="/settings/crm" className="text-xs text-blue-600 dark:text-blue-400 hover:underline text-right">
+                Pipeline rules & reminders →
+              </Link>
+              {jotformSyncMsg ? (
+                <p className="text-xs text-gray-700 dark:text-gray-300 text-right max-w-xs">{jotformSyncMsg}</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -228,7 +346,15 @@ export default function DashboardPage() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-400/20 dark:bg-purple-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
           <CardHeader className="pb-3 relative z-10">
             <div className="flex items-center justify-between mb-2">
-              <CardTitle className="text-sm font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wider">Referral Clicks</CardTitle>
+              <CardTitle className="text-sm font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                Referral Clicks
+                <span
+                  className="inline-flex"
+                  title="Total recorded opens of your referral links (e.g. when someone taps a friend’s share link or a tracked URL). Conversions are people who completed signup using a referral code. Used to measure partner and QR campaigns—not billing-critical."
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-purple-500/80 dark:text-purple-400/80 cursor-help" />
+                </span>
+              </CardTitle>
               <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                 <MousePointerClick className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
@@ -239,6 +365,9 @@ export default function DashboardPage() {
             <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mt-2 bg-white/50 dark:bg-gray-800/50 px-3 py-1.5 rounded-lg inline-block">
               {stats.referralConversions} conversions ({stats.referralClicks > 0 ? ((stats.referralConversions / stats.referralClicks) * 100).toFixed(1) : 0}%)
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2 leading-snug">
+              Pulled from referral link tracking in your database. If this stays at 0, no tracked referral URLs have been opened yet.
+            </p>
           </CardContent>
         </Card>
         <Card className="group relative overflow-hidden bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/30 dark:via-emerald-950/30 dark:to-teal-950/30 border-2 border-green-300/50 dark:border-green-800/50 shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-[1.02]">
@@ -467,6 +596,104 @@ export default function DashboardPage() {
                 <div className="text-4xl mb-2">📊</div>
                 <p>No data available</p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-gray-200/50 dark:border-gray-700/50 shadow-xl hover:shadow-2xl transition-all duration-500 md:col-span-2">
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <CardHeader className="border-b border-gray-200 dark:border-gray-700 relative z-10">
+            <CardTitle className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="p-1.5 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
+                <Users className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+              </div>
+              Intake by referral source
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 ml-8">
+              From contact tags (Referral Source: …) — useful for QR locations vs partners.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {chartData.intakeByReferralSource.length > 0 ? (
+              <ResponsiveContainer width="100%" height={Math.min(420, 40 + chartData.intakeByReferralSource.length * 36)}>
+                <BarChart layout="vertical" data={chartData.intakeByReferralSource.slice(0, 14)} margin={{ left: 8, right: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                  <XAxis type="number" stroke="var(--foreground)" style={{ fontSize: '12px' }} />
+                  <YAxis type="category" dataKey="name" width={160} stroke="var(--foreground)" style={{ fontSize: '11px' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      color: 'var(--foreground)',
+                    }}
+                  />
+                  <Bar dataKey="count" fill="#14b8a6" radius={[0, 6, 6, 0]} name="Contacts" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center text-gray-500 dark:text-gray-400 py-12">
+                <p>No referral source tags yet.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-gray-200/50 dark:border-gray-700/50 shadow-xl hover:shadow-2xl transition-all duration-500 md:col-span-2">
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <CardHeader className="border-b border-gray-200 dark:border-gray-700 relative z-10">
+            <CardTitle className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="p-1.5 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
+                <TrendingUp className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              </div>
+              QR vs referral (high level)
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 ml-8">
+              QR metrics are aggregate scans/submissions; referral conversions are tracked signups with a referral code.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {chartData.acquisitionFunnel ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-slate-50/80 dark:bg-slate-900/50">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Total contacts</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {chartData.acquisitionFunnel.totalContacts}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-emerald-50/80 dark:bg-emerald-950/30">
+                  <div className="text-xs font-semibold text-emerald-800 dark:text-emerald-300 uppercase">QR scans (sum)</div>
+                  <div className="text-2xl font-bold text-emerald-900 dark:text-emerald-100 mt-1">
+                    {chartData.acquisitionFunnel.qrScansTotal}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-teal-50/80 dark:bg-teal-950/30">
+                  <div className="text-xs font-semibold text-teal-800 dark:text-teal-300 uppercase">QR-linked submissions</div>
+                  <div className="text-2xl font-bold text-teal-900 dark:text-teal-100 mt-1">
+                    {chartData.acquisitionFunnel.qrSubmissionsTotal}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-purple-50/80 dark:bg-purple-950/30">
+                  <div className="text-xs font-semibold text-purple-800 dark:text-purple-300 uppercase">Referral conversions</div>
+                  <div className="text-2xl font-bold text-purple-900 dark:text-purple-100 mt-1">
+                    {chartData.acquisitionFunnel.referralConversionsTotal}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-slate-50/80 dark:bg-slate-900/50">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Referral / contacts %</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {chartData.acquisitionFunnel.referralConversionRate}%
+                  </div>
+                </div>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-slate-50/80 dark:bg-slate-900/50">
+                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">QR subs / contacts %</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {chartData.acquisitionFunnel.qrSubmissionRate}%
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 dark:text-gray-400 py-8">No funnel data.</div>
             )}
           </CardContent>
         </Card>

@@ -70,6 +70,18 @@ export default function QRCodesPage() {
   }, [])
 
   useEffect(() => {
+    const id = setInterval(() => void loadQRHistory(), 10000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void loadQRHistory()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [])
+
+  useEffect(() => {
     setOrigin(typeof window !== 'undefined' ? window.location.origin : '')
   }, [])
 

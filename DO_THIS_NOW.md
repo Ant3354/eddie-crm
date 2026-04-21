@@ -67,7 +67,7 @@ Click "Environment Variables" and add:
 
 Vercel **Hobby** only allows **one run per day** per scheduled cron. Campaigns stay on the daily schedule in `vercel.json`.
 
-**JotForm inbox sync every 30 minutes:** this repo includes **`.github/workflows/jotform-sync-cron.yml`**. Add GitHub Actions secrets `EDDIE_CRM_BASE_URL` (your live site URL, no trailing slash) and `CRON_SECRET` (same value as `CRON_SECRET` on Vercel). The workflow POSTs to `/api/cron/jotform-sync` with `Authorization: Bearer …`.
+**JotForm inbox sync every ~5 minutes:** use **`.github/workflows/jotform-inbox-sync.yml`**. In GitHub → Settings → Secrets and variables → Actions, add **`VERCEL_PRODUCTION_URL`** (your live site, e.g. `https://your-app.vercel.app`, no trailing slash) and **`CRON_SECRET`** (same value as on Vercel). The workflow **GET**s `/api/cron/jotform-sync` with `Authorization: Bearer …`. If secrets are missing, the job exits successfully with a notice (so Actions stays green until you configure it).
 
 ## 🔐 Rotate Neon database password (do in Neon console)
 

@@ -1,6 +1,21 @@
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 import { mapJotformInterestToCategory } from '@/lib/jotform-map-category'
+import {
+  coerceJotformAnswerToString,
+  extractIdentityHintsFromJotformAnswers,
+  normalizeContactIdentityStrings,
+} from '@/lib/jotform-field-coercion'
+import {
+  buildJotformIntakeSummary,
+  buildLeadNotesBlock,
+  extractDobFromAnswerMap,
+  extractGenderFromAnswerMap,
+} from '@/lib/jotform-intake-summary'
+import { encrypt } from '@/lib/encryption'
+import type { Prisma } from '@prisma/client'
+import { mergeIntakeDuplicates } from '@/lib/contact-merge'
+import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
 
 export type IngestJotformOptions = {
   /** Webhook URL (for QR UTM query params). Omit for API-poll imports. */
@@ -107,23 +122,13 @@ export async function ingestJotformPayload(
   let notes = ''
   let source = 'JotForm'
   let referralCode = ''
+  const answerMap: Record<string, string> = {}
 
   if (body.answers && Array.isArray(body.answers)) {
-    const answerMap: { [key: string]: any } = {}
     body.answers.forEach((ans: any) => {
       const fieldName = (ans.name || ans.text || ans.title || '').toLowerCase().trim()
-      let value = ''
-
-      if (typeof ans.answer === 'object' && ans.answer !== null) {
-        value =
-          ans.answer.name ||
-          ans.answer.text ||
-          ans.answer.value ||
-          JSON.stringify(ans.answer) ||
-          ''
-      } else {
-        value = String(ans.answer || ans.value || ans.text || '').trim()
-      }
+      const rawAns = ans.answer ?? ans.value ?? ans.text
+      const value = coerceJotformAnswerToString(rawAns)
 
       if (fieldName.includes('phone') || fieldName.includes('address')) {
         if (verbose) {
@@ -152,7 +157,6 @@ export async function ingestJotformPayload(
       answerMap['firstName'] ||
       answerMap['name']?.split(' ')[0] ||
       answerMap['name']?.split(',')[0] ||
-      answerMap['id_3'] ||
       ''
     lastName =
       answerMap['last name'] ||
@@ -160,14 +164,12 @@ export async function ingestJotformPayload(
       answerMap['lastName'] ||
       answerMap['name']?.split(' ').slice(1).join(' ') ||
       answerMap['name']?.split(',')[1] ||
-      answerMap['id_4'] ||
       ''
 
     email =
       answerMap['email'] ||
       answerMap['e-mail'] ||
       answerMap['email address'] ||
-      answerMap['id_9'] ||
       ''
 
     phone =
@@ -177,7 +179,6 @@ export async function ingestJotformPayload(
       answerMap['mobile phone'] ||
       answerMap['cell phone'] ||
       answerMap['telephone'] ||
-      answerMap['id_8'] ||
       ''
 
     if (phone && typeof phone === 'string') {
@@ -189,13 +190,10 @@ export async function ingestJotformPayload(
       answerMap['street address'] ||
       answerMap['full address'] ||
       answerMap['street'] ||
-      answerMap['city'] ||
-      answerMap['state'] ||
       answerMap['zip code'] ||
       answerMap['zipcode'] ||
       answerMap['zip code?'] ||
       answerMap['postal code'] ||
-      answerMap['id_7'] ||
       ''
 
     if (!address || address.length < 10) {
@@ -230,7 +228,6 @@ export async function ingestJotformPayload(
       answerMap['level of dental work needed'] ||
       answerMap['level of dental work needed ?'] ||
       answerMap['dental work'] ||
-      answerMap['id_11'] ||
       'PROSPECT'
 
     for (const [key, val] of Object.entries(answerMap)) {
@@ -257,7 +254,6 @@ export async function ingestJotformPayload(
       answerMap['preferred appointment time'] ||
       answerMap['best time of day to reach you'] ||
       answerMap['best time of day to reach you?'] ||
-      answerMap['id_10'] ||
       ''
 
     notes =
@@ -266,7 +262,6 @@ export async function ingestJotformPayload(
       answerMap['additional notes:'] ||
       answerMap['comments'] ||
       answerMap['message'] ||
-      answerMap['id_13'] ||
       ''
 
     source =
@@ -275,10 +270,15 @@ export async function ingestJotformPayload(
       answerMap['referral source'] ||
       answerMap['name of the dental office referring you'] ||
       answerMap['name of the dental office referring you?'] ||
-      answerMap['id_14'] ||
       'JotForm'
 
     referralCode = answerMap['referral code'] || answerMap['referral_code'] || ''
+
+    const hints = extractIdentityHintsFromJotformAnswers(body.answers)
+    firstName = firstName || hints.firstName
+    lastName = lastName || hints.lastName
+    phone = phone || hints.phone
+    address = address || hints.address
 
     if (verbose) {
       console.log('✅ Extracted data:', {
@@ -355,6 +355,26 @@ export async function ingestJotformPayload(
     body.referralCode ||
     ''
 
+  const intakeSummary =
+    Object.keys(answerMap).length > 0 ? buildJotformIntakeSummary(answerMap) : ''
+  const dobRaw = extractDobFromAnswerMap(answerMap)
+  const genderVal = extractGenderFromAnswerMap(answerMap)
+  const preferredContactTime = (appointmentTime || '').trim()
+  const leadNotesBlock = buildLeadNotesBlock(appointmentTime, notes, interestType)
+
+  {
+    const id = normalizeContactIdentityStrings(
+      firstName || '',
+      lastName || '',
+      (phone || '').trim(),
+      address || ''
+    )
+    firstName = id.firstName
+    lastName = id.lastName
+    phone = id.phone
+    address = id.address
+  }
+
   let qrCodeId: string | null = null
   if (options?.requestUrl) {
     try {
@@ -370,13 +390,13 @@ export async function ingestJotformPayload(
   if (body.answers && Array.isArray(body.answers)) {
     body.answers.forEach((ans: any) => {
       const fieldName = (ans.name?.toLowerCase() || ans.text?.toLowerCase() || '').trim()
-      const value = ans.answer || ans.value || ''
+      const valueStr = coerceJotformAnswerToString(ans.answer ?? ans.value ?? ans.text).trim()
 
       if (fieldName.includes('qr_code_id') || fieldName.includes('qr code id')) {
-        qrCodeId = value || qrCodeId
+        qrCodeId = valueStr || qrCodeId
       }
       if (fieldName.includes('referral_code') || fieldName.includes('referral code')) {
-        referralCode = value || referralCode
+        referralCode = valueStr || referralCode
       }
     })
   }
@@ -422,13 +442,33 @@ export async function ingestJotformPayload(
     phone = undefined
   }
 
-  let contact = await prisma.contact.findFirst({
-    where: {
-      OR: [...(email ? [{ email }] : []), ...(phone ? [{ mobilePhone: phone }] : [])],
-    },
-  })
+  const identityOr: Prisma.ContactWhereInput[] = []
+  if (email?.trim()) {
+    identityOr.push({ email: { equals: email.trim(), mode: 'insensitive' } })
+  }
+  if (phone?.trim()) {
+    identityOr.push({ mobilePhone: phone.trim() })
+  }
+  let isNewContact = false
+  let contact =
+    identityOr.length > 0
+      ? await prisma.contact.findFirst({
+          where: { OR: identityOr },
+        })
+      : null
 
   if (contact) {
+    const cleaned = normalizeContactIdentityStrings(
+      firstName || contact.firstName || '',
+      lastName || contact.lastName || '',
+      (phone || contact.mobilePhone || '').trim(),
+      address || contact.address || ''
+    )
+    firstName = cleaned.firstName
+    lastName = cleaned.lastName
+    phone = cleaned.phone
+    address = cleaned.address
+
     const nextSubmissionAt =
       submissionAt &&
       (!contact.lastJotformSubmissionAt || submissionAt > contact.lastJotformSubmissionAt)
@@ -437,19 +477,26 @@ export async function ingestJotformPayload(
     contact = await prisma.contact.update({
       where: { id: contact.id },
       data: {
-        firstName: firstName || contact.firstName,
-        lastName: lastName || contact.lastName,
+        firstName,
+        lastName,
         email: email || contact.email,
-        mobilePhone: phone || contact.mobilePhone,
-        address: address || contact.address,
+        mobilePhone: (phone && phone.trim()) || contact.mobilePhone,
+        address: (address && address.trim()) || contact.address,
         languagePreference: language || contact.languagePreference,
         category: category as any,
         status: status as any,
         ...(nextSubmissionAt ? { lastJotformSubmissionAt: nextSubmissionAt } : {}),
+        ...(genderVal ? { gender: genderVal } : {}),
+        ...(preferredContactTime
+          ? { preferredContactTime }
+          : {}),
+        ...(leadNotesBlock ? { leadNotes: leadNotesBlock } : {}),
+        ...(intakeSummary ? { jotformIntakeSummary: intakeSummary } : {}),
       },
     })
     if (verbose) console.log('Updated existing contact:', contact.id)
   } else {
+    isNewContact = true
     contact = await prisma.contact.create({
       data: {
         firstName,
@@ -461,6 +508,10 @@ export async function ingestJotformPayload(
         category: category as any,
         status: status as any,
         ...(submissionAt ? { lastJotformSubmissionAt: submissionAt } : {}),
+        ...(genderVal ? { gender: genderVal } : {}),
+        ...(preferredContactTime ? { preferredContactTime } : {}),
+        ...(leadNotesBlock ? { leadNotes: leadNotesBlock } : {}),
+        ...(intakeSummary ? { jotformIntakeSummary: intakeSummary } : {}),
       },
     })
     if (verbose) console.log('Created new contact:', contact.id)
@@ -473,6 +524,24 @@ export async function ingestJotformPayload(
         console.error('Failed to track referral conversion:', err)
       }
     }
+  }
+
+  try {
+    const merged = await mergeIntakeDuplicates(contact.id, { email, mobilePhone: phone })
+    if (verbose && merged > 0) console.log('🔗 Merged duplicate contacts:', merged)
+  } catch (err) {
+    console.warn('JotForm ingest: duplicate merge skipped:', err)
+  }
+
+  try {
+    await applyIntakePipelineRules({
+      contactId: contact.id,
+      isNewContact,
+      source,
+      qrCodeId: qrCodeId || null,
+    })
+  } catch (err) {
+    console.warn('JotForm ingest: pipeline rules error:', err)
   }
 
   if (source) {
@@ -581,6 +650,21 @@ export async function ingestJotformPayload(
     })
   }
 
+  if (dobRaw) {
+    try {
+      await prisma.sensitiveData.upsert({
+        where: { contactId: contact.id },
+        create: {
+          contactId: contact.id,
+          dob: encrypt(dobRaw),
+        },
+        update: { dob: encrypt(dobRaw) },
+      })
+    } catch (e) {
+      console.warn('JotForm ingest: could not store DOB in SensitiveData:', e)
+    }
+  }
+
   if (qrCodeId) {
     try {
       const { trackQRSubmission } = await import('@/lib/qrcode')
@@ -591,7 +675,14 @@ export async function ingestJotformPayload(
     }
   }
 
-  await logAudit('JOTFORM_SUBMISSION', undefined, contact.id)
+  await logAudit(
+    'JOTFORM_SUBMISSION',
+    undefined,
+    contact.id,
+    'submissionTime',
+    undefined,
+    submissionAt && !isNaN(submissionAt.getTime()) ? submissionAt.toISOString() : ''
+  )
 
   const submissionId = String(
     body.submissionID || body.submission_id || body.submissionId || body.id || ''

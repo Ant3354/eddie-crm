@@ -28,6 +28,10 @@
     "smoke": "node scripts/smoke-test.mjs",
     "test:deep-api": "node scripts/deep-api-test.mjs",
     "test:jotform": "node scripts/test-jotform-api.mjs",
+    "test:jotform-inbox-sync": "tsx scripts/run-jotform-inbox-sync-once.ts",
+    "jotform:clear-sync-and-resync": "tsx scripts/clear-jotform-sync-and-resync.ts",
+    "jotform:configure-dental": "node --env-file=.env.local scripts/configure-jotform-dental-form.mjs",
+    "vercel:fix-cron-secret": "node scripts/set-vercel-cron-secret.mjs",
     "test:e2e": "playwright test",
     "test:deep": "npm run smoke && npm run test:deep-api && npm run test:e2e"
   },

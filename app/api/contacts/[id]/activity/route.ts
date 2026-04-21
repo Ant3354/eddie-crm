@@ -79,12 +79,30 @@ export async function GET(
       take: 20,
     })
     auditLogs.forEach((log) => {
+      let timestamp: Date = log.createdAt
+      let title = log.action
+      let description = log.fieldName ? `${log.fieldName}: ${log.oldValue} → ${log.newValue}` : log.action
+
+      if (
+        log.action === 'JOTFORM_SUBMISSION' &&
+        log.fieldName === 'submissionTime' &&
+        log.newValue &&
+        typeof log.newValue === 'string'
+      ) {
+        const d = new Date(log.newValue)
+        if (!isNaN(d.getTime())) {
+          timestamp = d
+        }
+        title = 'JotForm submission'
+        description = 'Form submission imported (time from JotForm)'
+      }
+
       activities.push({
         id: log.id,
         type: 'AUDIT',
-        title: log.action,
-        description: log.fieldName ? `${log.fieldName}: ${log.oldValue} → ${log.newValue}` : log.action,
-        timestamp: log.createdAt,
+        title,
+        description,
+        timestamp,
         metadata: { action: log.action, fieldName: log.fieldName },
       })
     })

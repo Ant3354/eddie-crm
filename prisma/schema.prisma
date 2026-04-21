@@ -20,6 +20,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   auditLogs     AuditLog[]
+  ownedContacts Contact[] @relation("ContactOwner")
 }
 
 model Contact {
@@ -41,6 +42,17 @@ model Contact {
   renewalDate       DateTime?
   /// Latest JotForm submission time ingested (webhook or API poll).
   lastJotformSubmissionAt DateTime?
+  /// From JotForm (e.g. dental intake): Male / Female / Other.
+  gender                  String?
+  /// Best time to call / reach (free text from form).
+  preferredContactTime    String?
+  /// Free-text notes from intake (best time, comments, etc.) for quick view.
+  leadNotes               String?  @db.Text
+  /// Full labeled Q&A snapshot from the last JotForm ingest (dental survey, etc.).
+  jotformIntakeSummary    String?  @db.Text
+  /// Optional CRM owner (user) assigned by pipeline rules or manually.
+  ownerUserId             String?
+  ownerUser               User?    @relation("ContactOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
 
   // Relations
   tags              ContactTag[]
@@ -56,6 +68,7 @@ model Contact {
   @@index([category])
   @@index([status])
   @@index([paymentIssueAlert])
+  @@index([ownerUserId])
 }
 
 // Dedupes JotForm API poll + webhook so the same submission is not imported twice.
@@ -117,6 +130,8 @@ model Task {
   status      String @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
   dueDate     DateTime?
   completedAt DateTime?
+  /// Set when a due-date reminder email/SMS was sent (one-shot per task).
+  reminderSentAt DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   assignedTo  String?
@@ -321,5 +336,12 @@ model Template {
   content     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// Singleton CRM configuration (JSON). Use id "default".
+model CrmSettings {
+  id           String   @id
+  settingsJson String   @default("{}") @db.Text
+  updatedAt    DateTime @updatedAt
 }
 

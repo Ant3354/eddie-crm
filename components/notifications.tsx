@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Bell, AlertTriangle, Clock, X } from 'lucide-react'
 import Link from 'next/link'
 import { asArray } from '@/lib/as-array'
@@ -14,25 +14,33 @@ interface Notification {
   count: number
 }
 
+const NOTIF_ACK_KEY = 'eddie_notif_ack_sig'
+
+function notifSignature(list: Notification[]): string {
+  return list.map((n) => `${n.id}:${n.count ?? 1}`).join('|')
+}
+
 export function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showDropdown, setShowDropdown] = useState(false)
 
-  useEffect(() => {
-    loadNotifications()
-    const interval = setInterval(loadNotifications, 30000) // Refresh every 30 seconds
-    return () => clearInterval(interval)
-  }, [])
-
-  async function loadNotifications() {
+  const loadNotifications = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications')
+      const res = await fetch('/api/notifications', { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         const list = asArray<Notification>(data?.notifications)
         setNotifications(list)
-        setUnreadCount(typeof data?.unreadCount === 'number' ? data.unreadCount : list.length)
+        let ack = ''
+        try {
+          ack = sessionStorage.getItem(NOTIF_ACK_KEY) || ''
+        } catch {
+          /* private mode */
+        }
+        const sig = notifSignature(list)
+        const visible = list.length > 0 && sig !== ack ? list.length : 0
+        setUnreadCount(visible)
       } else {
         setNotifications([])
         setUnreadCount(0)
@@ -40,7 +48,24 @@ export function Notifications() {
     } catch (error) {
       console.error('Failed to load notifications:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void loadNotifications()
+    const interval = setInterval(() => void loadNotifications(), 15000)
+    return () => clearInterval(interval)
+  }, [loadNotifications])
+
+  useEffect(() => {
+    if (!showDropdown || notifications.length === 0) return
+    const sig = notifSignature(notifications)
+    try {
+      sessionStorage.setItem(NOTIF_ACK_KEY, sig)
+    } catch {
+      /* ignore */
+    }
+    setUnreadCount(0)
+  }, [showDropdown, notifications])
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -105,7 +130,15 @@ export function Notifications() {
                   <Link
                     key={notif.id}
                     href={notif.link}
-                    onClick={() => setShowDropdown(false)}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(NOTIF_ACK_KEY, notifSignature(notifications))
+                      } catch {
+                        /* ignore */
+                      }
+                      setUnreadCount(0)
+                      setShowDropdown(false)
+                    }}
                     className={`block p-3 mb-2 rounded-lg border-2 ${getColor(notif.type)} hover:shadow-md transition-all`}
                   >
                     <div className="flex items-start gap-3">

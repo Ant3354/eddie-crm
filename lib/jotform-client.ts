@@ -5,8 +5,21 @@
 
 const DEFAULT_BASE = 'https://api.jotform.com'
 
+/** Strip BOM, whitespace, and accidental wrapping quotes (common when pasting into Vercel). */
+export function normalizeJotformApiKey(raw: string | undefined): string | undefined {
+  if (raw == null) return undefined
+  let v = raw.replace(/^\uFEFF/, '').trim()
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim()
+  }
+  return v || undefined
+}
+
 export function getJotformApiKey(): string | undefined {
-  return process.env.JOTFORM_API_KEY?.trim() || undefined
+  return normalizeJotformApiKey(process.env.JOTFORM_API_KEY)
 }
 
 export function getJotformApiBase(): string {

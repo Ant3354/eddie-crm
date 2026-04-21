@@ -1,0 +1,49 @@
+# Vercel Hobby: hourly crons are rejected on deploy. Run task reminders from GitHub instead.
+# Same secrets as jotform-inbox-sync.yml: CRON_SECRET, VERCEL_PRODUCTION_URL
+
+name: Task due reminders
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: task-reminders
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger task reminders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ secrets.VERCEL_PRODUCTION_URL }}
+        run: |
+          set -eu
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${BASE_URL:-}" ]; then
+            echo "::notice title=Task reminders disabled::Add CRON_SECRET and VERCEL_PRODUCTION_URL repository secrets."
+            exit 0
+          fi
+          BASE_URL="$(printf '%s' "$BASE_URL" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          BASE_URL="${BASE_URL%/}"
+          if ! printf '%s' "$BASE_URL" | grep -qE '^https://'; then
+            echo "::error::VERCEL_PRODUCTION_URL must start with https://"
+            exit 1
+          fi
+          code=$(curl -sS --max-time 120 -o /tmp/task-rem-body.txt -w "%{http_code}" \
+            -X GET "${BASE_URL}/api/cron/task-reminders" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            -H "Accept: application/json")
+          echo "HTTP ${code}"
+          cat /tmp/task-rem-body.txt
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Task reminders returned HTTP ${code}"
+            exit 1
+          fi
