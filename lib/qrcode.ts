@@ -98,7 +98,7 @@ export async function trackQRSubmission(qrCodeId: string) {
         submissionCount: { increment: 1 },
       },
     })
-  } catch {
-    // Unknown or legacy id — ignore
+  } catch (err) {
+    console.error('[trackQRSubmission] skipped:', qrCodeId, err)
   }
 }

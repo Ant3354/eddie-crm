@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { trackQRScan } from '@/lib/qrcode'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Tracked entry URL for QR codes: increments scanCount then redirects to the real JotForm URL.
  * The QR image encodes this URL so Eddie CRM sees every scan.
@@ -24,7 +26,13 @@ export async function GET(request: NextRequest) {
     await trackQRScan(id)
 
     const dest = qr.jotFormUrl.trim()
-    return NextResponse.redirect(dest, 302)
+    return NextResponse.redirect(dest, {
+      status: 302,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+      },
+    })
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: message }, { status: 500 })

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const qrCodes = await prisma.qrCode.findMany()
@@ -18,13 +20,21 @@ export async function GET() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10)
 
-    return NextResponse.json({
-      totalScans,
-      totalSubmissions,
-      totalQRCodes: qrCodes.length,
-      scansBySource,
-      topSources,
-    })
+    return NextResponse.json(
+      {
+        totalScans,
+        totalSubmissions,
+        totalQRCodes: qrCodes.length,
+        scansBySource,
+        topSources,
+      },
+      {
+        headers: {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      }
+    )
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message },

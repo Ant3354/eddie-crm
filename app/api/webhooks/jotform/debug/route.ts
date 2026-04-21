@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'
 
 // Debug endpoint to check webhook status and recent submissions
 export async function GET() {
@@ -36,24 +38,32 @@ export async function GET() {
       },
     })
 
-    return NextResponse.json({
-      success: true,
-      webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/api/webhooks/jotform`,
-      recentContacts: recentContacts.map(c => ({
-        id: c.id,
-        name: `${c.firstName} ${c.lastName}`,
-        email: c.email,
-        phone: c.mobilePhone,
-        source: c.tags[0]?.name?.replace('Referral Source: ', '') || 'Unknown',
-        createdAt: c.createdAt,
-      })),
-      qrCodeStats: {
-        totalQRCodes: qrStats._count.id,
-        totalScans: qrStats._sum.scanCount || 0,
+    return NextResponse.json(
+      {
+        success: true,
+        webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/api/webhooks/jotform`,
+        recentContacts: recentContacts.map(c => ({
+          id: c.id,
+          name: `${c.firstName} ${c.lastName}`,
+          email: c.email,
+          phone: c.mobilePhone,
+          source: c.tags[0]?.name?.replace('Referral Source: ', '') || 'Unknown',
+          createdAt: c.createdAt,
+        })),
+        qrCodeStats: {
+          totalQRCodes: qrStats._count.id,
+          totalScans: qrStats._sum.scanCount || 0,
+        },
+        recentQRCodes,
+        message: 'Webhook is active and ready to receive submissions',
       },
-      recentQRCodes,
-      message: 'Webhook is active and ready to receive submissions',
-    })
+      {
+        headers: {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      }
+    )
   } catch (error: any) {
     return NextResponse.json(
       { 
