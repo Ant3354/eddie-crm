@@ -14,6 +14,7 @@ export async function GET() {
         jotFormUrl: true,
         qrCodeUrl: true,
         scanCount: true,
+        submissionCount: true,
         createdAt: true,
       },
     })

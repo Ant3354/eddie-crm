@@ -25,6 +25,7 @@ interface QRCodeHistory {
   jotFormUrl: string
   qrCodeUrl: string
   scanCount: number
+  submissionCount?: number
   createdAt: string
 }
 
@@ -81,12 +82,24 @@ export default function QRCodesPage() {
     setLoadingHistory(true)
     try {
       const res = await fetch('/api/qrcodes')
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText)
+        console.error('GET /api/qrcodes failed:', res.status, errText)
+        setQrHistory([])
+        return []
+      }
       const raw = await res.json()
+      if (raw && typeof raw === 'object' && 'error' in raw) {
+        console.error('GET /api/qrcodes error payload:', raw)
+        setQrHistory([])
+        return []
+      }
       const data = asArray<QRCodeHistory>(raw)
       setQrHistory(data)
       return data
     } catch (error) {
       console.error('Failed to load QR history:', error)
+      setQrHistory([])
       return []
     } finally {
       setLoadingHistory(false)
@@ -167,8 +180,9 @@ export default function QRCodesPage() {
             </h1>
           </div>
           <p className="text-gray-600 dark:text-gray-400">
-            Generate trackable QR codes that open your JotForm online. Phones need internet; submissions reach the CRM
-            through your JotForm webhook.
+            Each QR first opens this CRM (<strong>scan counted</strong>), then sends the visitor to your JotForm. New
+            contacts appear after your JotForm webhook posts to this app.{' '}
+            <strong>Regenerate</strong> older QR images so they use the tracker URL.
           </p>
         </div>
 
@@ -197,6 +211,23 @@ export default function QRCodesPage() {
                 QR generation needs <code className="text-xs">DATABASE_URL</code> on the server (your production
                 database). Without it, the API cannot save QR records.
               </p>
+              <div className="rounded-md border border-blue-200 dark:border-blue-900 bg-blue-50/80 dark:bg-blue-950/25 px-3 py-2 text-xs text-gray-700 dark:text-gray-300 space-y-1">
+                <p className="font-semibold text-gray-900 dark:text-white">JotForm → CRM</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>
+                    Webhook URL must be{' '}
+                    <code className="text-[11px] break-all">
+                      {publicConfig.crmBaseUrl}/api/webhooks/jotform
+                    </code>{' '}
+                    (POST, JSON).
+                  </li>
+                  <li>
+                    Add a <strong>hidden</strong> (or short text) field named exactly{' '}
+                    <code className="text-xs">qr_code_id</code> so JotForm captures it from the form URL query string.
+                    That ties each submission to this QR for <strong>submission</strong> counts.
+                  </li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         ) : null}
@@ -281,6 +312,7 @@ export default function QRCodesPage() {
                         qrCodeUrl: qrCode.qrCodeUrl,
                         source,
                         scanCount: 0,
+                        submissionCount: 0,
                         createdAt: new Date().toISOString(),
                         jotFormUrl: jotFormUrl || '',
                       }
@@ -316,7 +348,7 @@ export default function QRCodesPage() {
                             </Button>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="grid grid-cols-3 gap-2 text-sm">
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Source</p>
                             <p className="font-semibold text-gray-900 dark:text-white">{displayQR.source}</p>
@@ -324,6 +356,12 @@ export default function QRCodesPage() {
                           <div>
                             <p className="text-gray-600 dark:text-gray-400">Scans</p>
                             <p className="font-semibold text-green-600 dark:text-green-400">{displayQR.scanCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600 dark:text-gray-400">Submits</p>
+                            <p className="font-semibold text-emerald-700 dark:text-emerald-300">
+                              {displayQR.submissionCount ?? 0}
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -360,7 +398,7 @@ export default function QRCodesPage() {
                         Print QR sheet
                       </Button>
                       <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-                        Scanning opens your JotForm link with tracking parameters.
+                        Scanning hits this CRM first (scan +1), then redirects to JotForm with tracking parameters.
                       </p>
                     </div>
                   </div>
@@ -416,7 +454,7 @@ export default function QRCodesPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-semibold text-gray-900 dark:text-white truncate">{qr.source}</p>
                             <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs rounded-full">
-                              {qr.scanCount} scans
+                              {qr.scanCount} scans · {qr.submissionCount ?? 0} submits
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{qr.jotFormUrl}</p>

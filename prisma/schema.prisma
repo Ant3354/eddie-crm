@@ -225,8 +225,10 @@ model QrCode {
   jotFormUrl  String
   qrCodeUrl   String   // Generated QR code image path
   scanCount   Int      @default(0)
+  // JotForm submissions linked to this QR (webhook/API ingest with qr_code_id).
+  submissionCount Int @default(0)
   createdAt   DateTime @default(now())
-  
+
   @@index([source])
 }
 

@@ -6,6 +6,7 @@ export async function GET() {
     const qrCodes = await prisma.qrCode.findMany()
 
     const totalScans = qrCodes.reduce((sum, qr) => sum + qr.scanCount, 0)
+    const totalSubmissions = qrCodes.reduce((sum, qr) => sum + qr.submissionCount, 0)
     
     const scansBySource = qrCodes.reduce((acc, qr) => {
       acc[qr.source] = (acc[qr.source] || 0) + qr.scanCount
@@ -19,6 +20,7 @@ export async function GET() {
 
     return NextResponse.json({
       totalScans,
+      totalSubmissions,
       totalQRCodes: qrCodes.length,
       scansBySource,
       topSources,

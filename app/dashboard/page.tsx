@@ -34,6 +34,7 @@ export default function DashboardPage() {
     referralClicks: 0,
     referralConversions: 0,
     qrScans: 0,
+    qrSubmissions: 0,
   })
   const [chartData, setChartData] = useState<ChartDataState>(emptyCharts)
 
@@ -81,7 +82,7 @@ export default function DashboardPage() {
         }
       }
 
-      let qrStats: { totalScans?: number } = {}
+      let qrStats: { totalScans?: number; totalSubmissions?: number } = {}
       if (qrRes.ok) {
         try {
           qrStats = await qrRes.json()
@@ -113,6 +114,7 @@ export default function DashboardPage() {
         referralClicks: referralStats.totalClicks ?? 0,
         referralConversions: referralStats.totalConversions ?? 0,
         qrScans: qrStats.totalScans ?? 0,
+        qrSubmissions: qrStats.totalSubmissions ?? 0,
       })
 
       setChartData(analytics)
@@ -237,14 +239,17 @@ export default function DashboardPage() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-green-400/20 dark:bg-green-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
           <CardHeader className="pb-3 relative z-10">
             <div className="flex items-center justify-between mb-2">
-              <CardTitle className="text-sm font-semibold text-green-700 dark:text-green-400 uppercase tracking-wider">QR Code Scans</CardTitle>
+              <CardTitle className="text-sm font-semibold text-green-700 dark:text-green-400 uppercase tracking-wider">QR tracking</CardTitle>
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                 <QrCode className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="text-5xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent mb-3">{stats.qrScans}</div>
+            <div className="text-5xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent mb-1">{stats.qrScans}</div>
+            <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Scans (QR opened via CRM tracker)</div>
+            <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300 mb-1">{stats.qrSubmissions}</div>
+            <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Submissions (JotForm linked with qr_code_id)</div>
             <Link href="/qrcodes" className="text-sm text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-semibold inline-flex items-center gap-2 transition-all hover:gap-3">
               View QR codes <TrendingUp className="w-4 h-4" />
             </Link>

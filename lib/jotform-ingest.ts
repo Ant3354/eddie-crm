@@ -29,6 +29,23 @@ function normalizeAnswersToArray(body: any): any {
   return { ...body, answers: arr }
 }
 
+/** JotForm sometimes sends the landing URL in rawRequest / request — pick up qr_code_id if present. */
+function extractQrCodeIdFromJotformPayload(body: any): string | null {
+  const candidates = [body.rawRequest, body.raw_request, body.request, body.requestURL]
+  for (const c of candidates) {
+    if (typeof c !== 'string' || !c.trim()) continue
+    const m = c.match(/qr_code_id=([^&\s#"']+)/)
+    if (m?.[1]) {
+      try {
+        return decodeURIComponent(m[1])
+      } catch {
+        return m[1]
+      }
+    }
+  }
+  return null
+}
+
 export type IngestJotformResult = {
   success: true
   contactId: string
@@ -47,6 +64,7 @@ export async function ingestJotformPayload(
 ): Promise<IngestJotformResult> {
   const verbose = options?.verboseLog !== false
   body = normalizeAnswersToArray(body)
+  const qrFromRawPayload = extractQrCodeIdFromJotformPayload(body)
 
   if (verbose) {
     console.log('📥 JotForm ingest:', JSON.stringify(body, null, 2))
@@ -325,6 +343,10 @@ export async function ingestJotformPayload(
     referralCode = body.formData.referral_code || body.formData.referralCode || referralCode
   }
 
+  if (!qrCodeId && qrFromRawPayload) {
+    qrCodeId = qrFromRawPayload
+  }
+
   let status = 'LEAD'
   if (appointmentTime) {
     status = 'SCHEDULED'
@@ -521,11 +543,11 @@ export async function ingestJotformPayload(
 
   if (qrCodeId) {
     try {
-      const { trackQRScan } = await import('@/lib/qrcode')
-      await trackQRScan(qrCodeId)
-      if (verbose) console.log('✅ QR code scan tracked:', qrCodeId)
+      const { trackQRSubmission } = await import('@/lib/qrcode')
+      await trackQRSubmission(qrCodeId)
+      if (verbose) console.log('✅ QR submission tracked:', qrCodeId)
     } catch (err) {
-      console.error('Failed to track QR scan:', err)
+      console.error('Failed to track QR submission:', err)
     }
   }
 

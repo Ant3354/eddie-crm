@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    const since = new Date(Date.now() - 72 * 60 * 60 * 1000)
+    const recentJotformLeads = await prisma.auditLog.count({
+      where: {
+        action: 'JOTFORM_SUBMISSION',
+        createdAt: { gte: since },
+      },
+    })
+
     const notifications = []
     
     if (paymentAlerts > 0) {
@@ -56,6 +64,17 @@ export async function GET(request: NextRequest) {
         message: `${urgentTasks} urgent task${urgentTasks > 1 ? 's require' : ' requires'} immediate attention`,
         link: '/tasks?priority=URGENT',
         count: urgentTasks,
+      })
+    }
+
+    if (recentJotformLeads > 0) {
+      notifications.push({
+        id: 'jotform-leads',
+        type: 'info',
+        title: `${recentJotformLeads} JotForm lead${recentJotformLeads > 1 ? 's' : ''} (72h)`,
+        message: `New or updated contacts from JotForm in the last 72 hours`,
+        link: '/contacts',
+        count: recentJotformLeads,
       })
     }
 
