@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
+import { getAuthUserFromRequest } from '@/lib/auth'
+import { requestMeta } from '@/lib/request-meta'
+import { canBulkWrite, normalizeRole } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +80,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthUserFromRequest(request)
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!canBulkWrite(normalizeRole(auth.role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await request.json()
     const {
       firstName,
@@ -106,7 +117,14 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    await logAudit('CONTACT_CREATED', undefined, contact.id)
+    const meta = requestMeta(request)
+    await logAudit('CONTACT_CREATED', auth.userId, contact.id, undefined, undefined, undefined, meta)
+    if (emailOptIn) {
+      await logAudit('CONSENT_EMAIL_OPT_IN', auth.userId, contact.id, 'emailOptIn', 'false', 'true', meta)
+    }
+    if (smsOptIn) {
+      await logAudit('CONSENT_SMS_OPT_IN', auth.userId, contact.id, 'smsOptIn', 'false', 'true', meta)
+    }
 
     return NextResponse.json(contact)
   } catch (error: any) {

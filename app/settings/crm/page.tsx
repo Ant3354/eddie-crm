@@ -25,7 +25,10 @@ export default function CrmSettingsPage() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [settings, setSettings] = useState<CrmSettingsShape>({
     pipelineRules: [],
+    jotformFormRoutes: [],
+    referralAppreciationCopy: '',
     taskReminderHoursBeforeDue: 24,
+    uploadRetentionDays: 0,
   })
   const [message, setMessage] = useState<string | null>(null)
 
@@ -41,8 +44,13 @@ export default function CrmSettingsPage() {
         const s = await sRes.json()
         setSettings({
           pipelineRules: Array.isArray(s.pipelineRules) ? s.pipelineRules : [],
+          jotformFormRoutes: Array.isArray(s.jotformFormRoutes) ? s.jotformFormRoutes : [],
+          referralAppreciationCopy:
+            typeof s.referralAppreciationCopy === 'string' ? s.referralAppreciationCopy : '',
           taskReminderHoursBeforeDue:
             typeof s.taskReminderHoursBeforeDue === 'number' ? s.taskReminderHoursBeforeDue : 24,
+          uploadRetentionDays:
+            typeof s.uploadRetentionDays === 'number' ? s.uploadRetentionDays : 0,
         })
       }
       if (uRes.ok) setUsers(await uRes.json())
@@ -113,6 +121,59 @@ export default function CrmSettingsPage() {
           </div>
         ) : (
           <>
+            <Card className="mb-6 border border-gray-200 dark:border-gray-700">
+              <CardHeader>
+                <CardTitle>Upload retention (compliance)</CardTitle>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  When greater than 0, weekly cron{' '}
+                  <code className="text-xs bg-gray-200 dark:bg-gray-800 px-1 rounded">/api/cron/file-retention</code>{' '}
+                  removes parsed uploads older than this many days (requires <code className="text-xs">CRON_SECRET</code>).
+                </p>
+              </CardHeader>
+              <CardContent>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Days to keep contact files (0 = disabled)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={3650}
+                  className="w-32 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-gray-900 dark:text-white"
+                  value={settings.uploadRetentionDays ?? 0}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      uploadRetentionDays: Math.max(0, parseInt(e.target.value, 10) || 0),
+                    })
+                  }
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="mb-6 border border-gray-200 dark:border-gray-700">
+              <CardHeader>
+                <CardTitle>Referral appreciation copy (compliance)</CardTitle>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Used in the <strong className="font-medium">Active Client Referral Appreciation</strong> campaign as{' '}
+                  <code className="text-xs bg-gray-200 dark:bg-gray-800 px-1 rounded">[REFERRAL_APPRECIATION_COPY]</code>.
+                  Edit anytime without changing email templates in code.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <textarea
+                  className="w-full min-h-[140px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  value={settings.referralAppreciationCopy ?? ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      referralAppreciationCopy: e.target.value,
+                    })
+                  }
+                  placeholder="Neutral language about referral appreciation or offers (check state/plan rules)."
+                />
+              </CardContent>
+            </Card>
+
             <Card className="mb-6 border border-gray-200 dark:border-gray-700">
               <CardHeader>
                 <CardTitle>Task & appointment reminders</CardTitle>
@@ -224,6 +285,25 @@ export default function CrmSettingsPage() {
                           <option value="no">No QR only</option>
                         </select>
                       </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                          Contact status equals (optional)
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                          placeholder="e.g. LEAD"
+                          value={rule.ifContactStatus || ''}
+                          onChange={(e) => updateRule(i, { ifContactStatus: e.target.value || undefined })}
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-sm md:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(rule.ifNoPolicy)}
+                          onChange={(e) => updateRule(i, { ifNoPolicy: e.target.checked })}
+                        />
+                        Only when contact has no policies yet
+                      </label>
                       <div>
                         <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Set status</label>
                         <input

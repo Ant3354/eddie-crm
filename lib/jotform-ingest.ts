@@ -16,6 +16,7 @@ import { encrypt } from '@/lib/encryption'
 import type { Prisma } from '@prisma/client'
 import { mergeIntakeDuplicates } from '@/lib/contact-merge'
 import { applyIntakePipelineRules } from '@/lib/intake-pipeline-rules'
+import { applyJotformFormRouting } from '@/lib/jotform-form-routing'
 import { inferNameFromAnswerMap, inferNameFromFreeText } from '@/lib/intake-name-fallback'
 
 export type IngestJotformOptions = {
@@ -63,8 +64,27 @@ function extractQrCodeIdFromJotformPayload(body: any): string | null {
   return null
 }
 
+function parseNaiveDateString(value: string): Date | null {
+  const m = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+  )
+  if (!m) return null
+  const year = Number(m[1])
+  const month = Number(m[2]) - 1
+  const day = Number(m[3])
+  const hour = Number(m[4])
+  const minute = Number(m[5])
+  const second = Number(m[6] || '0')
+  const d = new Date(year, month, day, hour, minute, second)
+  return isNaN(d.getTime()) ? null : d
+}
+
 /** Parse JotForm submission timestamp from webhook or REST row. */
-export function parseJotformSubmissionDate(body: any): Date | null {
+export function parseJotformSubmissionDate(
+  body: any,
+  source: 'api_poll' | 'webhook' = 'webhook'
+): Date | null {
+  const now = new Date()
   const candidates = [
     body?.created_at,
     body?.updated_at,
@@ -77,12 +97,26 @@ export function parseJotformSubmissionDate(body: any): Date | null {
     if (c == null || c === '') continue
     if (typeof c === 'number') {
       const ms = c > 1e12 ? c : c > 1e9 ? c * 1000 : NaN
-      if (!isNaN(ms)) return new Date(ms)
+      if (!isNaN(ms)) {
+        const d = new Date(ms)
+        if (!isNaN(d.getTime())) return d
+      }
       continue
     }
-    const d = new Date(String(c))
+    const raw = String(c).trim()
+    const maybeNaive = parseNaiveDateString(raw)
+    if (maybeNaive) {
+      // Webhooks are near-real-time. If JotForm gives a naive date that drifts badly,
+      // trust ingestion time to avoid confusing "last submission" timestamps.
+      if (source === 'webhook' && Math.abs(now.getTime() - maybeNaive.getTime()) > 2 * 60 * 60 * 1000) {
+        return now
+      }
+      return maybeNaive
+    }
+    const d = new Date(raw)
     if (!isNaN(d.getTime())) return d
   }
+  if (source === 'webhook') return now
   return null
 }
 
@@ -105,7 +139,7 @@ export async function ingestJotformPayload(
   const verbose = options?.verboseLog !== false
   body = normalizeAnswersToArray(body)
   const qrFromRawPayload = extractQrCodeIdFromJotformPayload(body)
-  const submissionAt = parseJotformSubmissionDate(body)
+  const submissionAt = parseJotformSubmissionDate(body, options?.syncSource ?? 'webhook')
 
   if (verbose) {
     console.log('📥 JotForm ingest:', JSON.stringify(body, null, 2))
@@ -576,6 +610,11 @@ export async function ingestJotformPayload(
     console.warn('JotForm ingest: duplicate merge skipped:', err)
   }
 
+  {
+    const reloaded = await prisma.contact.findUnique({ where: { id: contact.id } })
+    if (reloaded) contact = reloaded
+  }
+
   try {
     await applyIntakePipelineRules({
       contactId: contact.id,
@@ -585,6 +624,24 @@ export async function ingestJotformPayload(
     })
   } catch (err) {
     console.warn('JotForm ingest: pipeline rules error:', err)
+  }
+
+  const resolvedFormId = String(
+    body.formID || body.form_id || process.env.JOTFORM_FORM_ID || ''
+  ).trim()
+  if (resolvedFormId) {
+    try {
+      await applyJotformFormRouting({
+        formId: resolvedFormId,
+        contactId: contact.id,
+        contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+        verbose,
+      })
+    } catch (err) {
+      console.warn('JotForm ingest: form routing error:', err)
+    }
+    const again = await prisma.contact.findUnique({ where: { id: contact.id } })
+    if (again) contact = again
   }
 
   if (source) {
@@ -619,36 +676,22 @@ export async function ingestJotformPayload(
     })
   }
 
-  if (status === 'ENROLLED' || status === 'ACTIVE_CLIENT') {
+  if (contact.status === 'ENROLLED' || contact.status === 'ACTIVE_CLIENT') {
     await prisma.contact.update({
       where: { id: contact.id },
       data: {
-        enrolledDate: new Date(),
+        enrolledDate: contact.enrolledDate || new Date(),
       },
     })
+    const withEnroll = await prisma.contact.findUnique({ where: { id: contact.id } })
+    if (withEnroll) contact = withEnroll
 
-    if (category === 'CONSUMER') {
+    if (contact.status === 'ACTIVE_CLIENT' && contact.category === 'CONSUMER') {
       try {
-        const referralCampaign = await prisma.campaign.findFirst({
-          where: {
-            type: 'REFERRAL_DRIP',
-            category: 'CONSUMER',
-            isActive: true,
-          },
-        })
-
-        if (referralCampaign) {
-          await prisma.campaignContact.create({
-            data: {
-              campaignId: referralCampaign.id,
-              contactId: contact.id,
-              status: 'ACTIVE',
-              currentStep: 0,
-            },
-          })
-        }
+        const { maybeEnrollActiveClientReferralStage2 } = await import('@/lib/active-client-referral')
+        await maybeEnrollActiveClientReferralStage2(contact.id)
       } catch (err) {
-        console.error('Failed to start referral campaign:', err)
+        console.error('Active client referral stage 2:', err)
       }
     }
 
@@ -681,7 +724,7 @@ export async function ingestJotformPayload(
     }
   }
 
-  if (status === 'SCHEDULED' && appointmentTime) {
+  if (contact.status === 'SCHEDULED' && appointmentTime) {
     await prisma.task.create({
       data: {
         contactId: contact.id,
@@ -730,9 +773,7 @@ export async function ingestJotformPayload(
   const submissionId = String(
     body.submissionID || body.submission_id || body.submissionId || body.id || ''
   ).trim()
-  const formId = String(
-    body.formID || body.form_id || process.env.JOTFORM_FORM_ID || ''
-  ).trim()
+  const formId = resolvedFormId
 
   if (submissionId && formId) {
     const src = options?.syncSource ?? 'webhook'

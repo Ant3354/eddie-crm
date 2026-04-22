@@ -1,5 +1,25 @@
 # JotForm Webhook Setup Guide
 
+## Per-form routing (dental / clinic / individual)
+
+The CRM matches each submission’s **form ID** to automation in `lib/jotform-form-routing.ts` using environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `JOTFORM_FORM_ID_DENTAL` | Dental office form → tag **Dental Partner Lead** + **Dental Partner Lead Sequence** |
+| `JOTFORM_FORM_ID_CLINIC` | Clinic form → tag **Clinic Partner Lead** + **Clinic Partner Lead Sequence** |
+| `JOTFORM_FORM_ID_CLIENT` or `JOTFORM_FORM_ID` | Personal/client form → **Individual Lead** + **Individual Welcome Nurture** |
+
+**Find your form IDs (recommended):** from the repo root, with a real `JOTFORM_API_KEY` in `.env` (Node 20+):
+
+```bash
+npm run jotform:list-forms
+```
+
+Copy the numeric **id** for each form into `.env` (local) and into **Vercel → Project → Settings → Environment Variables** (production). Redeploy or restart the dev server after changing env.
+
+**Manual:** open each form in JotForm → **Publish** → the public URL looks like `https://form.jotform.com/123456789012345` — the long number is the form ID.
+
 ## Current Form
 **Form URL:** https://form.jotform.com/253266939811163
 

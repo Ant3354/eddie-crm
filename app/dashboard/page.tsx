@@ -17,6 +17,7 @@ import {
   HelpCircle,
   UploadCloud,
   Loader2,
+  CheckCircle2,
 } from 'lucide-react'
 import { EDDIE_JOTFORM_SYNC_BEARER_SESSION_KEY } from '@/lib/jotform-sync-ui'
 
@@ -64,6 +65,16 @@ export default function DashboardPage() {
   const [chartData, setChartData] = useState<ChartDataState>(emptyCharts)
   const [jotformSyncLoading, setJotformSyncLoading] = useState(false)
   const [jotformSyncMsg, setJotformSyncMsg] = useState<string | null>(null)
+  const [setupStatus, setSetupStatus] = useState<{
+    databaseUrl?: boolean
+    encryptionKey?: boolean
+    smtp?: boolean
+    twilio?: boolean
+    cronSecret?: boolean
+    sessionSecret?: boolean
+    hasUsers?: boolean
+    requireLogin?: boolean
+  } | null>(null)
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8']
 
@@ -208,6 +219,13 @@ export default function DashboardPage() {
   }, [loadStats])
 
   useEffect(() => {
+    void fetch('/api/setup-status', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSetupStatus(d))
+      .catch(() => setSetupStatus(null))
+  }, [])
+
+  useEffect(() => {
     const t = setInterval(() => void loadStats(), 10000)
     const onVis = () => {
       if (document.visibilityState === 'visible') void loadStats()
@@ -269,6 +287,40 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {setupStatus ? (
+          <Card className="mb-8 border border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-md">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                First-run checklist
+              </CardTitle>
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-normal">
+                Green = configured. See <code className="text-[10px] bg-white/80 dark:bg-gray-900 px-1 rounded">docs/COMPLIANCE_KEYS.md</code> for key rotation.
+              </p>
+            </CardHeader>
+            <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+              {[
+                ['Database', setupStatus.databaseUrl],
+                ['Encryption key (32+ chars)', setupStatus.encryptionKey],
+                ['SMTP / email', setupStatus.smtp],
+                ['Twilio SMS', setupStatus.twilio],
+                ['Cron secret', setupStatus.cronSecret],
+                ['Session secret', setupStatus.sessionSecret],
+                ['Admin user exists', setupStatus.hasUsers],
+                ['Require login enforced', setupStatus.requireLogin],
+              ].map(([label, ok]) => (
+                <div
+                  key={String(label)}
+                  className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${ok ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-900 dark:text-amber-100 bg-amber-100/60 dark:bg-amber-950/40'}`}
+                >
+                  <CheckCircle2 className={`w-4 h-4 shrink-0 ${ok ? 'text-emerald-600' : 'text-amber-600'}`} />
+                  <span>{label}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
         
         <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-10">
         <Card className="group relative overflow-hidden bg-gradient-to-br from-white to-blue-50/50 dark:from-gray-800 dark:to-blue-900/20 border-2 border-blue-200/50 dark:border-blue-800/50 shadow-xl hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 hover:scale-[1.02]">

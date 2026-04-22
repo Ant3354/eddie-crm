@@ -11,6 +11,7 @@ const nextConfig = {
   },
   // Increase timeout for builds
   experimental: {
+    instrumentationHook: true,
     serverActions: {
       bodySizeLimit: '2mb',
     },

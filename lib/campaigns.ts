@@ -102,10 +102,11 @@ async function shouldTriggerStep(
     return isAfter(now, triggerDate) || differenceInDays(now, triggerDate) <= 1
   }
 
-  // Enrollment-based triggers
-  if (!contact.enrolledDate) return false
+  // Enrollment-based triggers (enrolledDate, or signup date for lead nurture)
+  const anchor = contact.enrolledDate || contact.createdAt
+  if (!anchor) return false
 
-  const triggerDate = addDays(contact.enrolledDate, step.triggerDays)
+  const triggerDate = addDays(anchor, step.triggerDays)
   const now = new Date()
 
   if (lastSentAt) {

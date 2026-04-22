@@ -40,6 +40,7 @@ interface Contact {
   policies: Array<any>
   tasks: Array<any>
   files: Array<any>
+  sensitiveData?: { present?: boolean } | null
 }
 
 export default function ContactDetailPage() {
@@ -53,6 +54,18 @@ export default function ContactDetailPage() {
   const [referralStats, setReferralStats] = useState<any>(null)
   const [activities, setActivities] = useState<any[]>([])
   const [copied, setCopied] = useState(false)
+  const [sessionRole, setSessionRole] = useState<string | null>(null)
+  const [sensitiveRevealed, setSensitiveRevealed] = useState<{
+    dob: string | null
+    ssn: string | null
+  } | null>(null)
+  const [sensitiveDraft, setSensitiveDraft] = useState({ dob: '', ssn: '' })
+  const [sensitiveLoading, setSensitiveLoading] = useState(false)
+
+  const canWrite = sessionRole == null || sessionRole.toUpperCase() !== 'READ_ONLY'
+  const canSensitive =
+    sessionRole != null &&
+    ['ADMIN', 'MANAGER', 'AGENT'].includes(sessionRole.toUpperCase())
 
   const loadContact = useCallback(async () => {
     setLoading(true)
@@ -69,6 +82,7 @@ export default function ContactDetailPage() {
         policies: asArray((data as Contact).policies),
         tasks: asArray((data as Contact).tasks),
         files: asArray((data as Contact).files),
+        sensitiveData: (data as Contact).sensitiveData ?? null,
       }
       setContact(normalized)
       const idv = getContactDisplayIdentity(normalized)
@@ -99,9 +113,18 @@ export default function ContactDetailPage() {
   }, [params.id, loadContact])
 
   useEffect(() => {
+    void fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: { role?: string } | null) => {
+        if (u?.role) setSessionRole(u.role)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const t = setInterval(() => {
       void loadContact()
-    }, 10000)
+    }, 30000)
     return () => clearInterval(t)
   }, [loadContact])
 
@@ -152,10 +175,15 @@ export default function ContactDetailPage() {
 
   async function handleSave() {
     try {
+      const body: Record<string, unknown> = { ...formData }
+      if (sensitiveRevealed) {
+        if (sensitiveDraft.dob.trim()) body.dob = sensitiveDraft.dob.trim()
+        if (sensitiveDraft.ssn.trim()) body.ssn = sensitiveDraft.ssn.trim()
+      }
       const res = await fetch(`/api/contacts/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(body),
       })
       if (res.ok) {
         await loadContact()
@@ -167,7 +195,23 @@ export default function ContactDetailPage() {
     }
   }
 
-  async function handlePDFUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function revealSensitive() {
+    setSensitiveLoading(true)
+    try {
+      const res = await fetch(`/api/contacts/${params.id}/sensitive`, { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Could not reveal sensitive fields')
+        return
+      }
+      setSensitiveRevealed({ dob: data.dob ?? null, ssn: data.ssn ?? null })
+      setSensitiveDraft({ dob: data.dob || '', ssn: data.ssn || '' })
+    } finally {
+      setSensitiveLoading(false)
+    }
+  }
+
+  async function handleContactDocumentUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -181,14 +225,27 @@ export default function ContactDetailPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        alert('PDF uploaded and parsed successfully!')
+        const conf = data.parsedData?.confidence
+        const confHint =
+          conf && typeof conf === 'object'
+            ? '\nParser confidence: ' +
+              Object.entries(conf)
+                .map(([k, v]) => `${k}=${Number(v).toFixed(2)}`)
+                .slice(0, 8)
+                .join(', ')
+            : ''
+        alert(
+          'Document uploaded and parsed. Blank fields were updated where we found matches.' + confHint
+        )
         await loadContact()
       } else {
-        alert('Failed to upload PDF: ' + data.error)
+        alert('Upload failed: ' + data.error)
       }
     } catch (error) {
-      console.error('PDF upload error:', error)
-      alert('Failed to upload PDF')
+      console.error('Document upload error:', error)
+      alert('Failed to upload document')
+    } finally {
+      e.target.value = ''
     }
   }
 
@@ -372,18 +429,22 @@ export default function ContactDetailPage() {
             <div className="flex gap-2">
               {!editing ? (
                 <>
-                  <Button onClick={() => setEditing(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white">
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
-                    onClick={() => void handleDelete()}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
+                  {canWrite ? (
+                    <Button onClick={() => setEditing(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white">
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : null}
+                  {canWrite ? (
+                    <Button
+                      variant="outline"
+                      className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+                      onClick={() => void handleDelete()}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </Button>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -413,6 +474,124 @@ export default function ContactDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          <Card className="mb-6 border-blue-200/80 dark:border-blue-900 bg-white/90 dark:bg-gray-900/60 shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                Next best action
+              </CardTitle>
+              <p className="text-xs text-gray-600 dark:text-gray-400 font-normal">
+                One primary path based on open tasks and contact channel.
+              </p>
+            </CardHeader>
+            <CardContent className="flex flex-col sm:flex-row flex-wrap gap-2">
+              {(() => {
+                const pending = (contact.tasks || []).filter(
+                  (t: { status?: string }) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
+                )
+                const phoneRaw = display.phone || contact.mobilePhone || ''
+                const tel = phoneRaw.replace(/[^\d+]/g, '')
+                return (
+                  <>
+                    {pending.length > 0 ? (
+                      <Button className="bg-blue-600 hover:bg-blue-700 text-white" asChild>
+                        <Link href="/tasks">Review tasks ({pending.length})</Link>
+                      </Button>
+                    ) : null}
+                    {tel ? (
+                      <Button variant="secondary" asChild>
+                        <a href={`tel:${tel}`}>Call</a>
+                      </Button>
+                    ) : null}
+                    {canWrite && contact.email && !offlineUi ? (
+                      <Button variant="secondary" type="button" onClick={() => void handleSendPortalEmail()}>
+                        <Send className="w-4 h-4 mr-2" />
+                        Send portal email
+                      </Button>
+                    ) : null}
+                    {canWrite ? (
+                      <Button variant="outline" asChild>
+                        <a href="#quick-document-upload">Upload document</a>
+                      </Button>
+                    ) : null}
+                  </>
+                )
+              })()}
+            </CardContent>
+          </Card>
+
+          {contact.sensitiveData?.present ? (
+            <Card className="mb-6 border-amber-200 dark:border-amber-900 bg-amber-50/90 dark:bg-amber-950/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-amber-700 dark:text-amber-400" />
+                  Sensitive data (DOB / SSN)
+                </CardTitle>
+                <p className="text-xs text-amber-900/90 dark:text-amber-200/90 font-normal">
+                  Values are encrypted at rest. Revealing plaintext is audited (who / when / which contact).
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!sensitiveRevealed ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canSensitive ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={sensitiveLoading}
+                        onClick={() => void revealSensitive()}
+                      >
+                        {sensitiveLoading ? 'Loading…' : 'Reveal DOB & SSN (audited)'}
+                      </Button>
+                    ) : (
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Your role cannot decrypt sensitive fields.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Hide values when finished — refresh the page or click below.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">DOB</label>
+                        <input
+                          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                          value={sensitiveDraft.dob}
+                          onChange={(e) => setSensitiveDraft((d) => ({ ...d, dob: e.target.value }))}
+                          disabled={!editing}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-400">SSN</label>
+                        <input
+                          className="mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                          value={sensitiveDraft.ssn}
+                          onChange={(e) => setSensitiveDraft((d) => ({ ...d, ssn: e.target.value }))}
+                          disabled={!editing}
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSensitiveRevealed(null)
+                        setSensitiveDraft({ dob: '', ssn: '' })
+                      }}
+                    >
+                      Hide from screen
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -684,18 +863,32 @@ export default function ContactDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="relative z-10 space-y-3">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  <Upload className="w-4 h-4" />
-                  Upload PDF
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handlePDFUpload}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
-                />
-              </div>
+              {canWrite ? (
+                <div id="quick-document-upload">
+                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    Attach document (parse)
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    onChange={handleContactDocumentUpload}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    PDF, DOCX, or TXT — saved to this contact and used to fill empty fields. To
+                    pre-fill before a record exists, use{' '}
+                    <Link href="/contacts/new" className="text-blue-600 dark:text-blue-400 underline">
+                      New contact
+                    </Link>
+                    .
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Read-only: document upload is disabled.
+                </p>
+              )}
               {offlineUi ? (
                 <div className="space-y-2">
                   <p className="text-xs text-gray-600 dark:text-gray-400">

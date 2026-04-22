@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCrmSettings, saveCrmSettings, parseCrmSettingsJson, type CrmSettingsShape } from '@/lib/crm-settings'
+import {
+  getCrmSettings,
+  saveCrmSettings,
+  parseCrmSettingsJson,
+  mergeCrmSettingsPatch,
+  type CrmSettingsShape,
+} from '@/lib/crm-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,8 +23,10 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = await request.json()
-    const parsed = parseCrmSettingsJson(JSON.stringify(body)) as CrmSettingsShape
+    const body = (await request.json()) as Partial<CrmSettingsShape>
+    const { settings: existing } = await getCrmSettings()
+    const merged = mergeCrmSettingsPatch(existing, body)
+    const parsed = parseCrmSettingsJson(JSON.stringify(merged))
     await saveCrmSettings(parsed)
     return NextResponse.json({ success: true, settings: parsed })
   } catch (e) {

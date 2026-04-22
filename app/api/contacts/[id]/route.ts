@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 import { encrypt } from '@/lib/encryption'
+import { getAuthUserFromRequest } from '@/lib/auth'
+import { requestMeta } from '@/lib/request-meta'
+import { canBulkWrite, normalizeRole } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +13,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthUserFromRequest(request)
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const contact = await prisma.contact.findUnique({
       where: { id: params.id },
       include: {
@@ -33,20 +41,22 @@ export async function GET(
       )
     }
 
-    // Get sensitive data if exists
-    const sensitiveData = await prisma.sensitiveData.findUnique({
+    const sensitiveRow = await prisma.sensitiveData.findUnique({
       where: { contactId: params.id },
+      select: { id: true },
     })
 
-    await logAudit('CONTACT_VIEWED', undefined, params.id)
+    const meta = requestMeta(request)
+    await logAudit('CONTACT_VIEWED', auth.userId, params.id, undefined, undefined, undefined, meta, {
+      hasSensitiveRecord: Boolean(sensitiveRow),
+    })
 
     return NextResponse.json(
       {
         ...contact,
-        sensitiveData: sensitiveData
+        sensitiveData: sensitiveRow
           ? {
-              dob: sensitiveData.dob,
-              ssn: sensitiveData.ssn,
+              present: true,
             }
           : null,
       },
@@ -70,6 +80,14 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthUserFromRequest(request)
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!canBulkWrite(normalizeRole(auth.role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await request.json()
     const {
       firstName,
@@ -157,6 +175,33 @@ export async function PATCH(
     if (ownerUserId !== undefined) updateData.ownerUserId = ownerUserId || null
     if (qrSourceLabel !== undefined) updateData.qrSourceLabel = qrSourceLabel || null
 
+    const meta = requestMeta(request)
+
+    if (oldContact) {
+      if (emailOptIn !== undefined && emailOptIn !== oldContact.emailOptIn) {
+        await logAudit(
+          'CONSENT_EMAIL_OPT_IN',
+          auth.userId,
+          params.id,
+          'emailOptIn',
+          String(oldContact.emailOptIn),
+          String(emailOptIn),
+          meta
+        )
+      }
+      if (smsOptIn !== undefined && smsOptIn !== oldContact.smsOptIn) {
+        await logAudit(
+          'CONSENT_SMS_OPT_IN',
+          auth.userId,
+          params.id,
+          'smsOptIn',
+          String(oldContact.smsOptIn),
+          String(smsOptIn),
+          meta
+        )
+      }
+    }
+
     const contact = await prisma.contact.update({
       where: { id: params.id },
       data: updateData,
@@ -177,7 +222,7 @@ export async function PATCH(
         update: sensitiveUpdate,
       })
 
-      await logAudit('SENSITIVE_DATA_UPDATED', undefined, params.id, 'DOB/SSN')
+      await logAudit('SENSITIVE_DATA_UPDATED', auth.userId, params.id, 'DOB/SSN')
     }
 
     // Log field changes
@@ -185,12 +230,35 @@ export async function PATCH(
       for (const [key, value] of Object.entries(updateData)) {
         const oldValue = (oldContact as any)[key]
         if (oldValue !== value) {
-          await logAudit('CONTACT_UPDATED', undefined, params.id, key, String(oldValue), String(value))
+          await logAudit(
+            'CONTACT_UPDATED',
+            auth.userId,
+            params.id,
+            key,
+            String(oldValue),
+            String(value),
+            meta
+          )
         }
       }
     }
 
-    return NextResponse.json(contact)
+    let out = contact
+    if (
+      (out.status === 'ENROLLED' || out.status === 'ACTIVE_CLIENT') &&
+      !out.enrolledDate
+    ) {
+      out = await prisma.contact.update({
+        where: { id: params.id },
+        data: { enrolledDate: new Date() },
+      })
+    }
+    if (out.status === 'ACTIVE_CLIENT' && out.category === 'CONSUMER') {
+      const { maybeEnrollActiveClientReferralStage2 } = await import('@/lib/active-client-referral')
+      await maybeEnrollActiveClientReferralStage2(params.id)
+    }
+
+    return NextResponse.json(out)
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message },
@@ -204,13 +272,29 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthUserFromRequest(request)
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!canBulkWrite(normalizeRole(auth.role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const id = params.id
     const existing = await prisma.contact.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
     }
 
-    await logAudit('CONTACT_DELETED', undefined, id)
+    await logAudit(
+      'CONTACT_DELETED',
+      auth.userId,
+      id,
+      undefined,
+      undefined,
+      undefined,
+      requestMeta(request)
+    )
     await prisma.sensitiveData.deleteMany({ where: { contactId: id } })
     await prisma.contact.delete({ where: { id } })
 

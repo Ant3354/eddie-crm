@@ -1,12 +1,15 @@
 import { prisma } from './prisma'
 import { generateReferralLink } from './referral-links'
 import { getPublicAppOrigin } from './app-origin'
+import { getCrmSettings } from './crm-settings'
 
 export async function replaceTemplateVariables(
   content: string,
   contactId: string,
   additionalVars?: { [key: string]: string }
 ): Promise<string> {
+  const { settings } = await getCrmSettings()
+
   const contact = await prisma.contact.findUnique({
     where: { id: contactId },
     include: {
@@ -35,6 +38,7 @@ export async function replaceTemplateVariables(
     : `${baseUrl}/payment?contact=${contactId}`
 
   const variables: { [key: string]: string } = {
+    '[REFERRAL_APPRECIATION_COPY]': (settings.referralAppreciationCopy || '').trim(),
     '[CONTACT_NAME]': `${contact.firstName} ${contact.lastName}`,
     '[FIRST_NAME]': contact.firstName,
     '[LAST_NAME]': contact.lastName,

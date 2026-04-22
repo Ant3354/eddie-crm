@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   Megaphone, ArrowLeft, Edit, Play, Pause, Users, Calendar, 
   Mail, MessageSquare, CheckSquare2, TrendingUp, Activity, 
-  Sparkles, Tag, Globe, Clock, Save, X
+  Sparkles, Save
 } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
 
@@ -47,17 +47,53 @@ interface Campaign {
   }
 }
 
+type StepForm = {
+  id?: string
+  stepOrder: number
+  triggerDays: number | null
+  channel: string
+  subject: string | null
+  content: string
+}
+
+function stepsToForm(steps: Campaign['steps']): StepForm[] {
+  const arr = asArray(steps) as Campaign['steps']
+  return arr
+    .slice()
+    .sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0))
+    .map((s, i) => ({
+      id: s.id,
+      stepOrder: i,
+      triggerDays: s.triggerDays ?? 0,
+      channel: s.channel || 'EMAIL',
+      subject: s.subject ?? '',
+      content: s.content ?? '',
+    }))
+}
+
 export default function CampaignDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<any>({})
+  const [sessionRole, setSessionRole] = useState<string | null>(null)
+
+  const canManageSteps =
+    sessionRole == null || ['ADMIN', 'MANAGER'].includes(sessionRole.toUpperCase())
 
   useEffect(() => {
     loadCampaign()
   }, [params.id])
+
+  useEffect(() => {
+    void fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: { role?: string } | null) => {
+        if (u?.role) setSessionRole(u.role)
+      })
+      .catch(() => {})
+  }, [])
 
   async function loadCampaign() {
     setLoading(true)
@@ -78,6 +114,7 @@ export default function CampaignDetailPage() {
           category: normalized.category,
           type: normalized.type,
           isActive: normalized.isActive,
+          steps: stepsToForm(normalized.steps),
         })
       } else {
         console.error('Failed to load campaign')
@@ -91,21 +128,96 @@ export default function CampaignDetailPage() {
 
   async function handleSave() {
     try {
+      const stepsPayload = asArray<StepForm>(formData.steps).map((s, i) => {
+        const td = s.triggerDays
+        const triggerDays =
+          td === null || td === undefined || Number.isNaN(Number(td)) ? 0 : Number(td)
+        return {
+          ...(s.id ? { id: s.id } : {}),
+          stepOrder: i,
+          triggerDays,
+          channel: String(s.channel || 'EMAIL').toUpperCase(),
+          subject: s.subject === '' || s.subject == null ? null : String(s.subject),
+          content: String(s.content ?? ''),
+        }
+      })
       const res = await fetch(`/api/campaigns/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          name: formData.name,
+          description: formData.description,
+          category: formData.category,
+          type: formData.type,
+          isActive: formData.isActive,
+          steps: stepsPayload,
+        }),
       })
+      const errJson = await res.json().catch(() => ({}))
       if (res.ok) {
         await loadCampaign()
         setEditing(false)
       } else {
-        alert('Failed to update campaign')
+        alert((errJson as { error?: string }).error || 'Failed to update campaign')
       }
     } catch (error) {
       console.error('Failed to update campaign:', error)
       alert('Failed to update campaign')
     }
+  }
+
+  function beginEdit() {
+    if (!campaign) return
+    setFormData({
+      name: campaign.name,
+      description: campaign.description || '',
+      category: campaign.category,
+      type: campaign.type,
+      isActive: campaign.isActive,
+      steps: stepsToForm(campaign.steps),
+    })
+    setEditing(true)
+  }
+
+  async function cancelEdit() {
+    setEditing(false)
+    await loadCampaign()
+  }
+
+  function addStep() {
+    const list = asArray<StepForm>(formData.steps)
+    setFormData({
+      ...formData,
+      steps: [
+        ...list,
+        {
+          stepOrder: list.length,
+          triggerDays: list.length === 0 ? 0 : 3,
+          channel: 'EMAIL',
+          subject: '',
+          content: '',
+        },
+      ],
+    })
+  }
+
+  function removeStep(index: number) {
+    const list = asArray<StepForm>(formData.steps).filter((_, i) => i !== index)
+    setFormData({ ...formData, steps: list.map((s, i) => ({ ...s, stepOrder: i })) })
+  }
+
+  function moveStep(index: number, dir: -1 | 1) {
+    const list = asArray<StepForm>(formData.steps).slice()
+    const j = index + dir
+    if (j < 0 || j >= list.length) return
+    ;[list[index], list[j]] = [list[j], list[index]]
+    setFormData({ ...formData, steps: list.map((s, i) => ({ ...s, stepOrder: i })) })
+  }
+
+  function updateStep(index: number, patch: Partial<StepForm>) {
+    const list = asArray<StepForm>(formData.steps).slice()
+    list[index] = { ...list[index], ...patch }
+    setFormData({ ...formData, steps: list })
   }
 
   const getCategoryColor = (category: string) => {
@@ -227,22 +339,32 @@ export default function CampaignDetailPage() {
             </div>
             <div className="flex gap-2">
               {!editing ? (
-                <Button onClick={() => setEditing(true)} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white">
+                <Button
+                  onClick={() => beginEdit()}
+                  disabled={!canManageSteps}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white disabled:opacity-50"
+                >
                   <Edit className="w-4 h-4 mr-2" />
                   Edit
                 </Button>
               ) : (
                 <>
-                  <Button onClick={handleSave} className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white">
+                  <Button onClick={() => void handleSave()} className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white">
                     <Save className="w-4 h-4 mr-2" />
                     Save
                   </Button>
-                  <Button variant="outline" onClick={() => setEditing(false)} className="border-gray-300 dark:border-gray-700">
+                  <Button variant="outline" onClick={() => void cancelEdit()} className="border-gray-300 dark:border-gray-700">
                     Cancel
                   </Button>
                 </>
               )}
             </div>
+            {!canManageSteps && !editing ? (
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 max-w-xl">
+                Sign in as <strong className="font-medium">Admin</strong> or <strong className="font-medium">Manager</strong>{' '}
+                to edit campaign copy and steps.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -349,22 +471,128 @@ export default function CampaignDetailPage() {
 
           {/* Campaign Steps */}
           <Card className="md:col-span-2 group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 border-gray-200/50 dark:border-gray-700/50 shadow-xl hover:shadow-2xl transition-all duration-500">
-            <CardHeader className="relative z-10">
+            <CardHeader className="relative z-10 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                Campaign Steps ({campaign.steps?.length || 0})
+                Campaign Steps ({editing ? asArray(formData.steps).length : campaign.steps?.length || 0})
               </CardTitle>
+              {editing && canManageSteps ? (
+                <Button type="button" size="sm" variant="secondary" onClick={() => addStep()}>
+                  Add step
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent className="relative z-10">
+              {editing && canManageSteps ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  <strong className="font-medium text-gray-700 dark:text-gray-300">Timing:</strong> days after enrollment
+                  (uses contact enrolled date, or created date for leads). Use negative numbers for renewal-based steps.{' '}
+                  <strong className="font-medium text-gray-700 dark:text-gray-300">Templates:</strong> e.g.{' '}
+                  <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">[FIRST_NAME]</code>,{' '}
+                  <code className="rounded bg-gray-100 dark:bg-gray-900 px-1">[REFERRAL_APPRECIATION_COPY]</code>.{' '}
+                  <strong className="font-medium text-amber-800 dark:text-amber-200">Note:</strong> changing order or
+                  removing steps can affect contacts mid-sequence.
+                </p>
+              ) : null}
               <div className="space-y-4">
-                {campaign.steps && campaign.steps.length > 0 ? (
+                {editing && canManageSteps ? (
+                  asArray<StepForm>(formData.steps).length > 0 ? (
+                    asArray<StepForm>(formData.steps).map((step, index) => (
+                      <Card
+                        key={step.id || `new-${index}`}
+                        className="relative bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/50 dark:to-gray-800/50 border-2 border-gray-200/50 dark:border-gray-700/50"
+                      >
+                        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getChannelColor(step.channel)}`} />
+                        <CardContent className="p-4 pt-5 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="font-semibold text-gray-900 dark:text-white">Step {index + 1}</h4>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" size="sm" variant="outline" onClick={() => moveStep(index, -1)} disabled={index === 0}>
+                                Up
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => moveStep(index, 1)}
+                                disabled={index >= asArray(formData.steps).length - 1}
+                              >
+                                Down
+                              </Button>
+                              <Button type="button" size="sm" variant="destructive" onClick={() => removeStep(index)}>
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Channel</label>
+                              <select
+                                className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                                value={step.channel}
+                                onChange={(e) => updateStep(index, { channel: e.target.value })}
+                              >
+                                <option value="EMAIL">EMAIL</option>
+                                <option value="SMS">SMS</option>
+                                <option value="TASK">TASK</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                                Days after enrollment (or negative = renewal)
+                              </label>
+                              <input
+                                type="number"
+                                className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                                value={step.triggerDays === null ? '' : step.triggerDays}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  updateStep(index, {
+                                    triggerDays: v === '' ? 0 : parseInt(v, 10),
+                                  })
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                              Subject (email/SMS preview or task title)
+                            </label>
+                            <input
+                              type="text"
+                              className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm"
+                              value={step.subject ?? ''}
+                              onChange={(e) => updateStep(index, { subject: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Message body</label>
+                            <textarea
+                              className="mt-1 w-full min-h-[120px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm font-sans"
+                              value={step.content}
+                              onChange={(e) => updateStep(index, { content: e.target.value })}
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <Sparkles className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p className="mb-2">No steps yet</p>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => addStep()}>
+                        Add first step
+                      </Button>
+                    </div>
+                  )
+                ) : campaign.steps && campaign.steps.length > 0 ? (
                   campaign.steps.map((step, index) => (
                     <Card
                       key={step.id}
-                      className="bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/50 dark:to-gray-800/50 border-2 border-gray-200/50 dark:border-gray-700/50"
+                      className="relative bg-gradient-to-br from-gray-50 to-white dark:from-gray-900/50 dark:to-gray-800/50 border-2 border-gray-200/50 dark:border-gray-700/50"
                     >
-                      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getChannelColor(step.channel)}`}></div>
-                      <CardContent className="p-4">
+                      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${getChannelColor(step.channel)}`} />
+                      <CardContent className="p-4 pt-5">
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-lg bg-gradient-to-br ${getChannelColor(step.channel)} text-white`}>
@@ -376,8 +604,8 @@ export default function CampaignDetailPage() {
                                 {step.triggerDays !== null && step.triggerDays < 0
                                   ? `${Math.abs(step.triggerDays)} days before renewal`
                                   : step.triggerDays === 0
-                                  ? 'Immediately'
-                                  : `${step.triggerDays} days after enrollment`}
+                                    ? 'Immediately'
+                                    : `${step.triggerDays} days after enrollment`}
                               </p>
                             </div>
                           </div>

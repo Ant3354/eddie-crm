@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Search, Filter, Download, Upload, Plus, Mail, Phone, AlertTriangle, Tag, Calendar, TrendingUp, Save as SaveIcon, Trash2, MapPin } from 'lucide-react'
 import { asArray } from '@/lib/as-array'
 import { getContactDisplayIdentity } from '@/lib/contact-identity-display'
+
+type UserRow = { id: string; email: string; name: string | null; role: string }
 
 interface Contact {
   id: string
@@ -32,6 +34,13 @@ export default function ContactsPage() {
   const [stats, setStats] = useState({ total: 0, alerts: 0, enrolled: 0 })
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const selectedIds = Object.entries(selected).filter(([,v])=>v).map(([id])=>id)
+  const [sessionRole, setSessionRole] = useState<string | null>(null)
+  const [users, setUsers] = useState<UserRow[]>([])
+  const [bulkOwnerId, setBulkOwnerId] = useState('')
+  const [kbHighlight, setKbHighlight] = useState(-1)
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  const canWrite = sessionRole == null || sessionRole.toUpperCase() !== 'READ_ONLY'
 
   const loadContacts = useCallback(async () => {
     setLoading(true)
@@ -68,6 +77,47 @@ export default function ContactsPage() {
   }, [loadContacts])
 
   useEffect(() => {
+    void fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: { role?: string } | null) => u?.role && setSessionRole(u.role))
+      .catch(() => {})
+    void fetch('/api/users', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((u: UserRow[]) => setUsers(Array.isArray(u) ? u : []))
+      .catch(() => setUsers([]))
+  }, [])
+
+  useEffect(() => {
+    setKbHighlight(-1)
+  }, [contacts])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return
+      if (contacts.length === 0) return
+      if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault()
+        setKbHighlight((i) => {
+          const base = i < 0 ? -1 : i
+          return Math.min(base + 1, contacts.length - 1)
+        })
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        setKbHighlight((i) => (i <= 0 ? 0 : i - 1))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [contacts])
+
+  useEffect(() => {
+    if (kbHighlight < 0 || !rowRefs.current[kbHighlight]) return
+    rowRefs.current[kbHighlight]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [kbHighlight])
+
+  useEffect(() => {
     const t = setInterval(() => {
       void loadContacts()
     }, 10000)
@@ -87,6 +137,44 @@ export default function ContactsPage() {
     await fetch('/api/contacts/bulk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'addTag', contactIds: selectedIds, tag: name }) })
     await loadContacts()
     setSelected({})
+  }
+
+  async function bulkAssignOwner() {
+    if (!bulkOwnerId || selectedIds.length === 0) return
+    const res = await fetch('/api/contacts/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'assignOwner', contactIds: selectedIds, ownerUserId: bulkOwnerId }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert((err as { error?: string }).error || 'Assign failed')
+      return
+    }
+    setSelected({})
+    await loadContacts()
+  }
+
+  async function exportCsv() {
+    const params = new URLSearchParams()
+    if (filter.category) params.set('category', filter.category)
+    if (filter.status) params.set('status', filter.status)
+    const res = await fetch(`/api/contacts/export?${params}`, { cache: 'no-store' })
+    if (res.status === 403) {
+      alert('Export is not allowed for your role.')
+      return
+    }
+    if (!res.ok) {
+      alert('Export failed')
+      return
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'contacts-export.csv'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function bulkDelete() {
@@ -216,13 +304,7 @@ export default function ContactsPage() {
             <Button
               variant="outline"
               className="border-gray-300 dark:border-gray-700"
-              onClick={async () => {
-                const params = new URLSearchParams()
-                if (filter.category) params.set('category', filter.category)
-                if (filter.status) params.set('status', filter.status)
-                const url = `/api/contacts/export?${params}`
-                window.open(url, '_blank')
-              }}
+              onClick={() => void exportCsv()}
             >
               <Download className="w-4 h-4 mr-2" />
               Export
@@ -357,36 +439,78 @@ export default function ContactsPage() {
 
         {/* Bulk Actions */}
         {selectedIds.length > 0 && (
-          <div className="mb-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 flex items-center justify-between">
+          <div className="mb-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-blue-800 dark:text-blue-300">{selectedIds.length} selected</div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={bulkAddTag}>Add Tag</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {canWrite ? (
+                <>
+                  <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={bulkAddTag}>
+                    Add Tag
+                  </Button>
+                  {users.length > 0 ? (
+                    <>
+                      <select
+                        className="text-sm rounded-md border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-900 px-2 py-1.5 max-w-[200px]"
+                        value={bulkOwnerId}
+                        onChange={(e) => setBulkOwnerId(e.target.value)}
+                      >
+                        <option value="">Assign owner…</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {(u.name || u.email) + ` (${u.role})`}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        variant="outline"
+                        className="border-blue-300 dark:border-blue-800"
+                        disabled={!bulkOwnerId}
+                        onClick={() => void bulkAssignOwner()}
+                      >
+                        Apply owner
+                      </Button>
+                    </>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
+                    onClick={() => void bulkDelete()}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1 inline" />
+                    Delete
+                  </Button>
+                </>
+              ) : null}
               <Button
                 variant="outline"
-                className="border-red-300 text-red-700 dark:border-red-800 dark:text-red-400"
-                onClick={() => void bulkDelete()}
+                className="border-blue-300 dark:border-blue-800"
+                onClick={() => {
+                  const csv = 'id\n' + selectedIds.join('\n')
+                  const blob = new Blob([csv], { type: 'text/csv' })
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = 'selected-contacts.csv'
+                  a.click()
+                }}
               >
-                <Trash2 className="w-4 h-4 mr-1 inline" />
-                Delete
+                Export IDs
               </Button>
-              <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={() => {
-                const csv = 'id\n' + selectedIds.join('\n')
-                const blob = new Blob([csv], { type: 'text/csv' })
-                const a = document.createElement('a')
-                a.href = URL.createObjectURL(blob)
-                a.download = 'selected-contacts.csv'
-                a.click()
-              }}>Export IDs</Button>
-              <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={()=>setSelected({})}>Clear</Button>
+              <Button variant="outline" className="border-blue-300 dark:border-blue-800" onClick={() => setSelected({})}>
+                Clear
+              </Button>
             </div>
           </div>
         )}
 
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <input type="checkbox" className="w-4 h-4" onChange={(e)=>toggleAll(e.target.checked)} />
             <span className="text-sm text-gray-600 dark:text-gray-400">Select all</span>
           </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Keyboard: <kbd className="px-1 rounded bg-gray-200 dark:bg-gray-800">j</kbd> /{' '}
+            <kbd className="px-1 rounded bg-gray-200 dark:bg-gray-800">k</kbd> move highlight (not in search field).
+          </p>
         </div>
 
         {/* Contacts List */}
@@ -397,16 +521,19 @@ export default function ContactsPage() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {contacts.map((contact) => {
+            {contacts.map((contact, idx) => {
               const display = getContactDisplayIdentity(contact)
               return (
               <Card
                 key={contact.id}
+                ref={(el) => {
+                  rowRefs.current[idx] = el
+                }}
                 className={`group relative overflow-hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-2 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 ${
                   contact.paymentIssueAlert
                     ? 'border-red-400 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20'
                     : 'border-gray-200/50 dark:border-gray-700/50'
-                }`}
+                } ${kbHighlight === idx ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900' : ''}`}
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-400/5 dark:bg-blue-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                 <CardContent className="p-6 relative z-10">

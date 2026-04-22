@@ -11,7 +11,8 @@ export type IntakePipelineContext = {
 
 function ruleMatches(
   rule: IntakePipelineRule,
-  ctx: IntakePipelineContext
+  ctx: IntakePipelineContext,
+  contact: { status: string; _count: { policies: number } }
 ): boolean {
   if (rule.enabled === false) return false
   if (rule.newContactOnly && !ctx.isNewContact) return false
@@ -22,6 +23,10 @@ function ruleMatches(
   if (rule.ifHasQr === true && !ctx.qrCodeId) return false
   if (rule.ifHasQr === false && ctx.qrCodeId) return false
 
+  const st = (rule.ifContactStatus || '').trim()
+  if (st && contact.status !== st) return false
+  if (rule.ifNoPolicy === true && contact._count.policies > 0) return false
+
   return true
 }
 
@@ -30,6 +35,12 @@ export async function applyIntakePipelineRules(ctx: IntakePipelineContext): Prom
   const rules = settings.pipelineRules || []
   if (rules.length === 0) return
 
+  const contact = await prisma.contact.findUnique({
+    where: { id: ctx.contactId },
+    include: { _count: { select: { policies: true } } },
+  })
+  if (!contact) return
+
   const updates: {
     status?: string
     category?: string
@@ -37,7 +48,7 @@ export async function applyIntakePipelineRules(ctx: IntakePipelineContext): Prom
   } = {}
 
   for (const rule of rules) {
-    if (!ruleMatches(rule, ctx)) continue
+    if (!ruleMatches(rule, ctx, contact)) continue
 
     if (rule.setStatus?.trim()) updates.status = rule.setStatus.trim()
     if (rule.setCategory?.trim()) updates.category = rule.setCategory.trim()

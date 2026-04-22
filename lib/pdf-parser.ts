@@ -6,6 +6,8 @@ export interface ParsedPDFData {
   address?: string
   dob?: string
   ssn?: string
+  email?: string
+  mobilePhone?: string
   planType?: string
   monthlyPremium?: number
   beneficiaries?: string[]
@@ -14,22 +16,18 @@ export interface ParsedPDFData {
   confidence: { [key: string]: number }
 }
 
-export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
-  const dataBuffer = await fs.readFile(filePath)
-  const data = await pdfParse(dataBuffer)
-  
-  const text = data.text
+/** Regex-based extraction from plain text (PDF, DOCX, TXT, etc.). */
+export function parseInsuranceDocumentText(text: string): ParsedPDFData {
   const result: ParsedPDFData = {
     confidence: {},
   }
 
-  // Extract name patterns
   const namePatterns = [
     /Name[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
     /Full Name[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
     /([A-Z][a-z]+\s+[A-Z][a-z]+)/,
   ]
-  
+
   for (const pattern of namePatterns) {
     const match = text.match(pattern)
     if (match) {
@@ -45,7 +43,30 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     }
   }
 
-  // Extract address
+  const emailLabeled = text.match(
+    /(?:E-?mail|Email address)[#:\s]+([^\s<>\n]+@[^\s<>\n]+)/i
+  )
+  const emailLoose = text.match(
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/
+  )
+  const email = (emailLabeled?.[1] || emailLoose?.[0])?.trim()
+  if (email) {
+    result.email = email
+    result.confidence.email = emailLabeled ? 0.85 : 0.5
+  }
+
+  const phoneLabeled = text.match(
+    /(?:Mobile|Cell|Phone|Tel(?:ephone)?)[#:\s]+([\d\s\-().+]{10,})/i
+  )
+  const phoneLoose = text.match(
+    /(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}\b/
+  )
+  const rawPhone = (phoneLabeled?.[1] || phoneLoose?.[0])?.trim()
+  if (rawPhone) {
+    result.mobilePhone = rawPhone.replace(/\s+/g, ' ')
+    result.confidence.mobilePhone = phoneLabeled ? 0.8 : 0.45
+  }
+
   const addressPattern = /Address[:\s]+([^\n]+(?:\n[^\n]+){0,2})/i
   const addressMatch = text.match(addressPattern)
   if (addressMatch) {
@@ -53,7 +74,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     result.confidence.address = 0.7
   }
 
-  // Extract DOB
   const dobPatterns = [
     /Date of Birth[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
     /DOB[:\s]+(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i,
@@ -68,7 +88,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     }
   }
 
-  // Extract SSN (XXX-XX-XXXX)
   const ssnPattern = /SSN[:\s]+(\d{3}-\d{2}-\d{4})/i
   const ssnMatch = text.match(ssnPattern)
   if (ssnMatch) {
@@ -76,7 +95,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     result.confidence.ssn = 0.9
   }
 
-  // Extract plan type
   const planPatterns = [
     /Plan Type[:\s]+([^\n]+)/i,
     /Plan[:\s]+([^\n]+)/i,
@@ -91,7 +109,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     }
   }
 
-  // Extract premium
   const premiumPatterns = [
     /Premium[:\s]+\$?([\d,]+\.?\d*)/i,
     /Monthly Premium[:\s]+\$?([\d,]+\.?\d*)/i,
@@ -106,7 +123,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     }
   }
 
-  // Extract policy number
   const policyPattern = /Policy[#\s:]+([A-Z0-9\-]+)/i
   const policyMatch = text.match(policyPattern)
   if (policyMatch) {
@@ -114,7 +130,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     result.confidence.policyNumber = 0.8
   }
 
-  // Extract carrier
   const carrierPatterns = [
     /Carrier[:\s]+([^\n]+)/i,
     /Insurance Company[:\s]+([^\n]+)/i,
@@ -129,7 +144,6 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
     }
   }
 
-  // Extract beneficiaries
   const beneficiaryPattern = /Benefici?ary[:\s]+([^\n]+)/gi
   const beneficiaries: string[] = []
   let beneficiaryMatch
@@ -144,3 +158,8 @@ export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
   return result
 }
 
+export async function parsePDF(filePath: string): Promise<ParsedPDFData> {
+  const dataBuffer = await fs.readFile(filePath)
+  const data = await pdfParse(dataBuffer)
+  return parseInsuranceDocumentText(data.text || '')
+}

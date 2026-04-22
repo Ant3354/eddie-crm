@@ -16,7 +16,7 @@ model User {
   email         String   @unique
   passwordHash  String
   name          String?
-  role          String   @default("AGENT") // ADMIN, AGENT, CONTRACTOR
+  role          String   @default("AGENT") // ADMIN, MANAGER, AGENT, CONTRACTOR, READ_ONLY
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   auditLogs     AuditLog[]
@@ -266,6 +266,8 @@ model AuditLog {
   fieldName   String?  // For field-level tracking (SSN, DOB)
   oldValue    String?
   newValue    String?
+  /// JSON metadata (export row counts, bulk action payloads) — append-only audit trail.
+  detailsJson String?  @db.Text
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime @default(now())

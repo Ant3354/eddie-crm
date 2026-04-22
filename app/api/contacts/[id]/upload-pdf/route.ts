@@ -1,16 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { parsePDF } from '@/lib/pdf-parser'
+import { extractParsedFromUpload } from '@/lib/contact-document-extract'
 import { encrypt } from '@/lib/encryption'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { getAuthUserFromRequest } from '@/lib/auth'
+import { canUploadDocuments, normalizeRole } from '@/lib/rbac'
+import { logAudit } from '@/lib/audit'
+import { requestMeta } from '@/lib/request-meta'
+
+const MAX_BYTES = 12 * 1024 * 1024
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await getAuthUserFromRequest(request)
+    if (!auth) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!canUploadDocuments(normalizeRole(auth.role))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -19,6 +33,9 @@ export async function POST(
         { error: 'No file provided' },
         { status: 400 }
       )
+    }
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: 'File too large (max 12 MB).' }, { status: 400 })
     }
 
     // Save file
@@ -34,8 +51,7 @@ export async function POST(
 
     await writeFile(filePath, buffer)
 
-    // Parse PDF
-    const parsedData = await parsePDF(filePath)
+    const parsedData = await extractParsedFromUpload(buffer, file.name)
 
     // Save file record
     const fileRecord = await prisma.file.create({
@@ -66,6 +82,12 @@ export async function POST(
       }
       if (!contact.address && parsedData.address) {
         updateData.address = parsedData.address
+      }
+      if (!contact.email && parsedData.email) {
+        updateData.email = parsedData.email
+      }
+      if (!contact.mobilePhone && parsedData.mobilePhone) {
+        updateData.mobilePhone = parsedData.mobilePhone
       }
 
       if (Object.keys(updateData).length > 0) {
@@ -103,6 +125,20 @@ export async function POST(
         })
       }
     }
+
+    await logAudit(
+      'CONTACT_DOCUMENT_UPLOADED',
+      auth.userId,
+      params.id,
+      file.name,
+      undefined,
+      undefined,
+      requestMeta(request),
+      {
+        fileId: fileRecord.id,
+        confidence: parsedData.confidence || {},
+      }
+    )
 
     return NextResponse.json({
       success: true,

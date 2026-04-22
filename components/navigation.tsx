@@ -5,6 +5,7 @@ import { ThemeToggle } from './theme-toggle'
 import { QuickActions } from './quick-actions'
 import { Notifications } from './notifications'
 import { CommandPalette } from './command-palette'
+import { AuthNav } from './auth-nav'
 
 export function Navigation() {
   return (
@@ -18,6 +19,7 @@ export function Navigation() {
             EDDIE CRM
           </Link>
           <div className="flex gap-4 items-center">
+            <AuthNav />
             <QuickActions />
             <CommandPalette />
             <Link

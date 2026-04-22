@@ -273,6 +273,128 @@ async function main() {
   })
   console.log('✅ Created Prospect Nurture Sequence campaign')
 
+  // --- JotForm-driven sequences (names referenced by lib/jotform-form-routing.ts & env form IDs) ---
+  const jotformCampaigns = [
+    {
+      name: 'Dental Partner Lead Sequence',
+      category: 'DENTAL_OFFICE_PARTNER' as const,
+      description: 'Email sequence when dental office partner form is submitted',
+      steps: [
+        {
+          stepOrder: 0,
+          triggerDays: 0,
+          channel: 'EMAIL' as const,
+          subject: 'Welcome — dental partner next steps',
+          content:
+            'Thank you for connecting with us as a dental office partner. We will follow up shortly with materials and scheduling. Questions? Reply to this email.',
+        },
+        {
+          stepOrder: 1,
+          triggerDays: 7,
+          channel: 'EMAIL' as const,
+          subject: 'Partner resources & patient education',
+          content:
+            'Here are resources you can share with patients. If you would like a benefits day at your office, reply with preferred dates.',
+        },
+      ],
+    },
+    {
+      name: 'Clinic Partner Lead Sequence',
+      category: 'HEALTH_OFFICE_PARTNER' as const,
+      description: 'Email sequence when clinic / health office form is submitted',
+      steps: [
+        {
+          stepOrder: 0,
+          triggerDays: 0,
+          channel: 'EMAIL' as const,
+          subject: 'Welcome — clinic partner next steps',
+          content:
+            'Thank you for your interest as a clinic partner. Our team will reach out with onboarding details.',
+        },
+        {
+          stepOrder: 1,
+          triggerDays: 5,
+          channel: 'EMAIL' as const,
+          subject: 'Scheduling a quick partner call',
+          content: 'We would love a brief call to align on how we support your patients. Reply with a good time this week.',
+        },
+      ],
+    },
+    {
+      name: 'Individual Welcome Nurture',
+      category: 'CONSUMER' as const,
+      description: 'Welcome / nurture for personal or client intake JotForm',
+      steps: [
+        {
+          stepOrder: 0,
+          triggerDays: 0,
+          channel: 'EMAIL' as const,
+          subject: 'Thanks — we received your information',
+          content:
+            'Hi [FIRST_NAME], thank you for reaching out. A licensed advisor will review your details and follow up. If you need anything sooner, call [SUPPORT_PHONE].',
+        },
+        {
+          stepOrder: 1,
+          triggerDays: 3,
+          channel: 'EMAIL' as const,
+          subject: 'Your coverage options (next steps)',
+          content:
+            'Hi [FIRST_NAME], here is a quick overview of next steps. Schedule time with us: [APPOINTMENT_LINK]',
+        },
+        {
+          stepOrder: 2,
+          triggerDays: 10,
+          channel: 'SMS' as const,
+          subject: 'Still here to help',
+          content:
+            'Hi [FIRST_NAME], want a quick call about your options? Reply YES and we will reach out.',
+        },
+      ],
+    },
+    {
+      name: 'Active Client Referral Appreciation',
+      category: 'CONSUMER' as const,
+      description:
+        'Second-stage referral touchpoints after individual becomes ACTIVE_CLIENT. Edit [REFERRAL_APPRECIATION_COPY] under CRM settings for compliance language.',
+      steps: [
+        {
+          stepOrder: 0,
+          triggerDays: 7,
+          channel: 'EMAIL' as const,
+          subject: 'Thank you for being a client — share the love?',
+          content:
+            'Hi [FIRST_NAME], we appreciate you. [REFERRAL_APPRECIATION_COPY]\n\nIf you know someone who could use help with coverage, share your link: [REFERRAL_LINK]',
+        },
+        {
+          stepOrder: 1,
+          triggerDays: 45,
+          channel: 'EMAIL' as const,
+          subject: 'Referral reminder (optional)',
+          content:
+            'Hi [FIRST_NAME], a quick note: [REFERRAL_APPRECIATION_COPY]\n\nYour personal referral link: [REFERRAL_LINK]',
+        },
+      ],
+    },
+  ]
+
+  for (const jc of jotformCampaigns) {
+    const exists = await prisma.campaign.findFirst({ where: { name: jc.name } })
+    if (exists) continue
+    await prisma.campaign.create({
+      data: {
+        name: jc.name,
+        description: jc.description,
+        category: jc.category,
+        type: 'NURTURE',
+        isActive: true,
+        steps: {
+          create: jc.steps,
+        },
+      },
+    })
+    console.log('✅ Created campaign:', jc.name)
+  }
+
   console.log('✅ Seeding completed! All campaigns created.')
 }
 
